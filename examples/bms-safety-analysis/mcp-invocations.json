@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BMS Safety Analysis MCP Tool Invocations",
+  "description": "Complete JSON-RPC 2.0 invocations for all MCP safety tools used in BMS overcurrent protection analysis",
+  "version": "1.0.0",
+  "invocations": [
+    {
+      "step": 1,
+      "tool": "safety-hara-template",
+      "description": "Generate HARA template for BMS overcurrent protection",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+          "name": "safety-hara-template",
+          "arguments": {
+            "function": "overcurrent_protection",
+            "system": "battery_management_system",
+            "asil_target": "C",
+            "operating_modes": [
+              "normal_driving",
+              "fast_charging_dc",
+              "ac_charging",
+              "regenerative_braking",
+              "parked_standby"
+            ],
+            "thresholds": {
+              "overcurrent_threshold_a": 500,
+              "fault_tolerant_time_ms": 100
+            }
+          }
+        }
+      },
+      "output_file": "01-hara-output.md"
+    },
+    {
+      "step": 2,
+      "tool": "safety-fmea-generate",
+      "description": "Create FMEA for BMS overcurrent protection function",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+          "name": "safety-fmea-generate",
+          "arguments": {
+            "function": "overcurrent_protection",
+            "parent_hara": ["HE-001", "HE-003"],
+            "components": [
+              "current_sensor",
+              "adc_converter",
+              "safety_mcu",
+              "contactor_driver"
+            ],
+            "safety_requirements": ["SSR-001", "SSR-002", "SSR-003"],
+            "analysis_depth": "component_level",
+            "include_interface_failures": true
+          }
+        }
+      },
+      "output_file": "02-fmea-output.md"
+    },
+    {
+      "step": 3,
+      "tool": "safety-fta-analyze",
+      "description": "Perform fault tree analysis for BMS overcurrent protection failure",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+          "name": "safety-fta-analyze",
+          "arguments": {
+            "top_event": "Contactor fails to open within 100ms of overcurrent detection",
+            "top_event_id": "TE-001",
+            "branches": [
+              "no_detection",
+              "command_failure",
+              "mechanical_failure",
+              "power_failure"
+            ],
+            "basic_events": [
+              {
+                "id": "BE-001",
+                "description": "Current sensor fault",
+                "failure_rate": "1.0e-6",
+                "diagnostic_coverage": 0.90
+              },
+              {
+                "id": "BE-002",
+                "description": "ADC conversion failure",
+                "failure_rate": "5.0e-7",
+                "diagnostic_coverage": 0.85
+              },
+              {
+                "id": "BE-003",
+                "description": "MCU computation failure",
+                "failure_rate": "2.0e-6",
+                "diagnostic_coverage": 0.95
+              },
+              {
+                "id": "BE-004",
+                "description": "Driver MOSFET short circuit",
+                "failure_rate": "1.0e-7",
+                "diagnostic_coverage": 0.80
+              },
+              {
+                "id": "BE-005",
+                "description": "Contactor coil open circuit",
+                "failure_rate": "5.0e-8",
+                "diagnostic_coverage": 0.90
+              },
+              {
+                "id": "BE-006",
+                "description": "Contactor welded contacts",
+                "failure_rate": "1.0e-7",
+                "diagnostic_coverage": 0.0
+              },
+              {
+                "id": "BE-007",
+                "description": "12V supply loss",
+                "failure_rate": "1.0e-7",
+                "diagnostic_coverage": 0.95
+              }
+            ],
+            "quantitative": true,
+            "include_cut_sets": true,
+            "asil_target": "C"
+          }
+        }
+      },
+      "output_file": "03-fta-output.md"
+    },
+    {
+      "step": 4,
+      "tool": "safety-asil-decompose",
+      "description": "Decompose ASIL C overcurrent protection requirement into redundant elements",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {
+          "name": "safety-asil-decompose",
+          "arguments": {
+            "safety_requirement": "SR-BMS-003: The BMS shall disconnect the battery within 100ms of detecting overcurrent exceeding 500A",
+            "original_asil": "C",
+            "decomposition_approach": "redundant_monitor",
+            "element1": {
+              "id": "Element 1",
+              "name": "software_overcurrent_monitor",
+              "asil": "B(C)",
+              "implementation": {
+                "processor": "Main MCU (Cortex-R5, 300MHz)",
+                "sensor": "ADC channel 0 (shunt + amplifier)",
+                "sampling_rate_hz": 10000,
+                "algorithm": "Digital filter (moving average, 1ms window) + threshold comparison",
+                "actuation": "Contactor open command via CAN message (0x100, byte 0 = 0x01)",
+                "response_time_ms": {
+                  "detection": 5,
+                  "command": 10,
+                  "actuation": 85,
+                  "total": 100
+                }
+              }
+            },
+            "element2": {
+              "id": "Element 2",
+              "name": "hardware_overcurrent_limiter",
+              "asil": "A(C)",
+              "implementation": {
+                "processor": "No processor (pure analog + comparator)",
+                "sensor": "Dedicated shunt resistor (Vishay FWS2512, 0.5mΩ, 1% tolerance)",
+                "comparator": "TI TLV3501 (response time 4.5ns)",
+                "threshold": "Fixed by resistor divider (500A = 250mV across shunt)",
+                "actuation": "Direct GPIO drive to contactor driver (independent of MCU)",
+                "response_time_ms": {
+                  "detection": 0.01,
+                  "comparator": 0.05,
+                  "actuation": 50,
+                  "total": 50.06
+                }
+              }
+            },
+            "independence_analysis": {
+              "required_aspects": [
+                "sensor",
+                "signal_conditioning",
+                "conversion",
+                "processor",
+                "power_supply",
+                "communication",
+                "actuation_path",
+                "software",
+                "algorithm",
+                "development_team",
+                "testing"
+              ]
+            },
+            "ccf_analysis": {
+              "beta_factor": 0.05,
+              "categories": [
+                "hardware",
+                "environmental",
+                "systematic",
+                "process"
+              ]
+            },
+            "verification_required": [
+              "fault_injection",
+              "timing_validation",
+              "ccf_testing",
+              "environmental_testing"
+            ]
+          }
+        }
+      },
+      "output_file": "04-asil-decomposition.md"
+    }
+  ],
+  "automation_script": {
+    "python": {
+      "description": "Execute all MCP invocations sequentially",
+      "script": "mcp_automation.py",
+      "usage": "python mcp_automation.py --config mcp-invocations.json --output-dir ./"
+    },
+    "nodejs": {
+      "description": "Execute all MCP invocations via Node.js script",
+      "script": "mcp-automation.js",
+      "usage": "node mcp-automation.js --config mcp-invocations.json --output-dir ./"
+    }
+  },
+  "traceability": {
+    "hara_to_fmea": {
+      "HE-001": ["FMEA-BMS-SW-001", "FMEA-BMS-SW-003"],
+      "HE-003": ["FMEA-BMS-SW-001", "FMEA-BMS-SW-002", "FMEA-BMS-SW-003", "FMEA-BMS-HW-001"]
+    },
+    "fmea_to_fta": {
+      "Current Sensor: Under-reporting": "BE-001",
+      "ADC: Stuck conversion": "BE-002",
+      "MCU: Software hang": "BE-003",
+      "Contactor: Fails to open": "BE-004, BE-005, BE-006"
+    },
+    "fta_to_asil_decomposition": {
+      "TE-001": "SR-BMS-003",
+      "G1 (No Detection)": "Element 1 + Element 2 redundancy",
+      "BE-001, BE-002, BE-003": "Covered by Element 2 (HW Limiter) independence"
+    }
+  },
+  "metadata": {
+    "project": "BMS Safety Analysis Example",
+    "component": "Battery Management System - Overcurrent Protection",
+    "asil_level": "C",
+    "standards": [
+      "ISO 26262-3:2018 (HARA)",
+      "ISO 26262-6:2018 (FMEA)",
+      "ISO 26262-4:2018 (FTA)",
+      "ISO 26262-9:2018 (ASIL Decomposition)"
+    ],
+    "created": "2025-03-19",
+    "revision": "1.0",
+    "status": "Approved"
+  }
+}

@@ -1,0 +1,11 @@
+2026-03-25 21:08:26 - INFO - Starting installation
+2026-03-25 21:08:26 - INFO - Source validated: /c/Users/insyn/Development/automotive-copilot-agents/.github/copilot
+2026-03-25 21:08:28 - INFO - Creating backup: /c/Users/insyn/Development/automotive-copilot-agents/.github/copilot.backup.20260325_210828
+2026-03-25 21:08:29 - INFO - Backup created successfully: /c/Users/insyn/Development/automotive-copilot-agents/.github/copilot.backup.20260325_210828
+2026-03-25 21:08:30 - INFO - Copied 0 agent instruction files
+2026-03-25 21:08:34 - INFO - Copied 0 skill context files
+2026-03-25 21:08:44 - INFO - Copied 0 knowledge files
+2026-03-25 21:08:44 - INFO - Copied 0 trigger files
+2026-03-25 21:08:44 - INFO - Copied 0 persona files
+2026-03-25 21:08:44 - INFO - Installation complete: 0 files copied
+2026-03-25 21:08:49 - INFO - Created installation manifest

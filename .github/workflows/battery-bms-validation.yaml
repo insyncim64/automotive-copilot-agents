@@ -1,0 +1,400 @@
+name: Battery BMS Validation
+version: 1.0.0
+description: "Comprehensive validation workflow for Battery Management System including cell monitoring, thermal management, and safety functions"
+
+on:
+  push:
+    branches: [develop, release/*]
+    paths:
+      - 'src/bms/**'
+      - 'tests/bms/**'
+      - 'models/battery/**'
+      - 'config/bms/**'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'src/bms/**'
+      - 'tests/bms/**'
+  schedule:
+    # Weekly BMS safety review
+    - cron: '0 0 * * 1'
+
+env:
+  SAFETY_LEVEL: ASIL-C
+  PYTHON_VERSION: '3.10'
+  BMS_SIMULATOR_VERSION: '2.4.0'
+
+jobs:
+  cell-monitoring-validation:
+    name: Cell Monitoring Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install BMS test dependencies
+        run: |
+          pip install -r requirements-bms.txt
+          pip install -r requirements-testing.txt
+
+      - name: Validate cell voltage measurement accuracy
+        run: |
+          python tests/bms/test_cell_voltage_accuracy.py \
+            --tolerance-mv 5 \
+            --range-min 2.5 \
+            --range-max 4.5 \
+            --output results/cell-voltage-accuracy.json
+
+      - name: Validate cell temperature measurement
+        run: |
+          python tests/bms/test_temperature_accuracy.py \
+            --tolerance-celsius 2.0 \
+            --range-min -20 \
+            --range-max 80 \
+            --output results/temperature-accuracy.json
+
+      - name: Validate isolation monitoring
+        run: |
+          python tests/bms/test_isolation_monitor.py \
+            --min-isolation-mohm 500 \
+            --fault-threshold-mohm 100 \
+            --output results/isolation-monitor.json
+
+      - name: Validate open-wire detection
+        run: |
+          python tests/bms/test_open_wire_detection.py \
+            --cell-count 96 \
+            --injection-points all \
+            --output results/open-wire-detection.json
+
+      - name: Upload cell monitoring results
+        uses: actions/upload-artifact@v4
+        with:
+          name: cell-monitoring-results
+          path: |
+            results/cell-*.json
+            results/temperature-*.json
+            results/isolation-*.json
+            results/open-wire-*.json
+
+  soc-soh-estimation-validation:
+    name: SOC/SOH Estimation Validation
+    runs-on: gpu-latest
+    needs: cell-monitoring-validation
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install ML dependencies
+        run: |
+          pip install -r requirements-ml.txt
+          pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+      - name: Download cell monitoring results
+        uses: actions/download-artifact@v4
+        with:
+          name: cell-monitoring-results
+          path: results/
+
+      - name: Run SOC estimation (Extended Kalman Filter)
+        run: |
+          python tests/bms/test_soc_ekf.py \
+            --model models/bms/soc_ekf_v3.onnx \
+            --dataset data/bms/cycle_test_data.csv \
+            --metrics results/soc-ekf-metrics.json \
+            --rmse-threshold 0.02
+
+      - name: Run SOC estimation (Neural Network)
+        run: |
+          python tests/bms/test_soc_nn.py \
+            --model models/bms/soc_lstm_v2.pth \
+            --dataset data/bms/cycle_test_data.csv \
+            --metrics results/soc-nn-metrics.json \
+            --mae-threshold 0.015
+
+      - name: Run SOH estimation
+        run: |
+          python tests/bms/test_soh_estimation.py \
+            --method incremental_capacity \
+            --dataset data/bms/aging_test_data.csv \
+            --metrics results/soh-ic-metrics.json
+
+      - name: Run SOH estimation (Data-driven)
+        run: |
+          python tests/bms/test_soh_ml.py \
+            --model models/bms/soh_gradient_boost.pkl \
+            --dataset data/bms/aging_test_data.csv \
+            --metrics results/soh-ml-metrics.json
+
+      - name: Compare SOC estimation methods
+        run: |
+          python tools/compare_soc_estimators.py \
+            --ekf-results results/soc-ekf-metrics.json \
+            --nn-results results/soc-nn-metrics.json \
+            --output results/soc-comparison-report.md
+
+      - name: Upload SOC/SOH results
+        uses: actions/upload-artifact@v4
+        with:
+          name: soc-soh-results
+          path: |
+            results/soc-*.json
+            results/soh-*.json
+            results/soc-comparison-report.md
+
+  thermal-management-validation:
+    name: Thermal Management Validation
+    runs-on: ubuntu-latest
+    needs: cell-monitoring-validation
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install thermal simulation dependencies
+        run: |
+          pip install -r requirements-thermal.txt
+
+      - name: Run thermal model simulation
+        run: |
+          python tests/bms/test_thermal_model.py \
+            --model models/thermal/lumped_parameter_v2.py \
+            --scenario data/thermal/drive_cycle_wltp.csv \
+            --output results/thermal-model-validation.json
+
+      - name: Validate cooling control strategy
+        run: |
+          python tests/bms/test_thermal_control.py \
+            --controller models/thermal/pid_controller_v1.py \
+            --scenario data/thermal/fast_charge_150kw.csv \
+            --max-temp 45 \
+            --temp-uniformity 5 \
+            --output results/thermal-control.json
+
+      - name: Validate heating control strategy
+        run: |
+          python tests/bms/test_heating_control.py \
+            --scenario data/thermal/cold_start_-20c.csv \
+            --target-temp 15 \
+            --warmup-time-max 600 \
+            --output results/heating-control.json
+
+      - name: Run thermal runaway detection test
+        run: |
+          python tests/bms/test_thermal_runaway_detection.py \
+            --detection-method multi-sensor-fusion \
+            --false-positive-rate 0.001 \
+            --detection-time-max 5000 \
+            --output results/thermal-runaway-detection.json
+
+      - name: Upload thermal results
+        uses: actions/upload-artifact@v4
+        with:
+          name: thermal-results
+          path: |
+            results/thermal-*.json
+            results/heating-*.json
+
+  safety-functions-validation:
+    name: Safety Functions Validation (ASIL-C)
+    runs-on: ubuntu-latest
+    needs: [soc-soh-estimation-validation, thermal-management-validation]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install safety test dependencies
+        run: |
+          pip install -r requirements-safety.txt
+
+      - name: Download all previous results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-results'
+          path: all-results/
+
+      - name: Test over-voltage protection
+        run: |
+          python tests/bms/safety/test_overvoltage_protection.py \
+            --threshold-v 4.25 \
+            --reaction-time-ms 10 \
+            --fault-injection all-cells \
+            --output results/safety-overvoltage.json
+
+      - name: Test under-voltage protection
+        run: |
+          python tests/bms/safety/test_undervoltage_protection.py \
+            --threshold-v 2.5 \
+            --reaction-time-ms 100 \
+            --fault-injection all-cells \
+            --output results/safety-undervoltage.json
+
+      - name: Test overcurrent protection
+        run: |
+          python tests/bms/safety/test_overcurrent_protection.py \
+            --threshold-a 500 \
+            --reaction-time-ms 10 \
+            --fault-injection charge-and-discharge \
+            --output results/safety-overcurrent.json
+
+      - name: Test short-circuit protection
+        run: |
+          python tests/bms/safety/test_shortcircuit_protection.py \
+            --detection-time-us 100 \
+            --contactor-open-time-ms 5 \
+            --output results/safety-shortcircuit.json
+
+      - name: Test over-temperature protection
+        run: |
+          python tests/bms/safety/test_overtemp_protection.py \
+            --threshold-celsius 60 \
+            --hysteresis-celsius 5 \
+            --reaction-time-ms 50 \
+            --output results/safety-overtemp.json
+
+      - name: Validate safety state machine
+        run: |
+          python tests/bms/safety/test_safety_state_machine.py \
+            --states all \
+            --transitions all \
+            --fault-sequences single-and-dual \
+            --output results/safety-state-machine.json
+
+      - name: Verify ASIL-C diagnostic coverage
+        run: |
+          python tools/calculate_diagnostic_coverage.py \
+            --safety-results all-results/safety-*.json \
+            --target-coverage 0.97 \
+            --output results/diagnostic-coverage-report.md
+
+      - name: Upload safety results
+        uses: actions/upload-artifact@v4
+        with:
+          name: safety-results
+          path: |
+            results/safety-*.json
+            results/diagnostic-coverage-report.md
+
+  hil-integration-testing:
+    name: HIL Integration Testing
+    runs-on: self-hosted
+    needs: safety-functions-validation
+    environment: bms-hil-bench
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build BMS firmware for HIL target
+        run: |
+          cmake -B build -DCMAKE_TOOLCHAIN_FILE=toolchain-bms-ecu.cmake
+          cmake --build build --target bms_firmware
+
+      - name: Flash BMS ECU
+        run: |
+          python tools/flash_bms_ecu.py \
+            --target ${{ vars.BMS_ECU_TARGET }} \
+            --binary build/bms_firmware.bin \
+            --verify
+
+      - name: Run HIL normal operation test
+        run: |
+          robot --outputdir results/hil/ \
+            --variable ECU:${{ vars.BMS_ECU_TARGET }} \
+            --include normal-operation \
+            tests/bms/hil/
+
+      - name: Run HIL fault injection test
+        run: |
+          robot --outputdir results/hil/ \
+            --variable ECU:${{ vars.BMS_ECU_TARGET }} \
+            --include fault-injection \
+            tests/bms/hil/
+
+      - name: Run HIL timing verification
+        run: |
+          python tests/bms/hil/verify_timing.py \
+            --max-cycle-time-ms 10 \
+            --jitter-max-ms 1 \
+            --output results/hil-timing-verification.json
+
+      - name: Run HIL communication test
+        run: |
+          python tests/bms/hil/test_can_communication.py \
+            --bus BMS_CAN \
+            --messages all \
+            --timeout-ms 500 \
+            --output results/hil-can-comm.json
+
+      - name: Upload HIL results
+        uses: actions/upload-artifact@v4
+        with:
+          name: hil-results
+          path: |
+            results/hil/
+
+  release-approval:
+    name: Release Approval
+    runs-on: ubuntu-latest
+    needs: [hil-integration-testing]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    steps:
+      - name: Download all results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-results'
+          path: all-results/
+
+      - name: Compile BMS validation summary
+        run: |
+          python tools/compile_bms_validation_report.py \
+            --inputs all-results/ \
+            --template templates/bms-validation-report.md \
+            --output bms-validation-summary.md
+
+      - name: Check open safety issues
+        run: |
+          gh issue list \
+            --label "bms" \
+            --label "safety" \
+            --state open \
+            > open-safety-issues.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate release recommendation
+        run: |
+          python tools/generate_bms_release_recommendation.py \
+            --summary bms-validation-summary.md \
+            --safety-issues open-safety-issues.md \
+            --asil-level ${{ env.SAFETY_LEVEL }} \
+            --output release-recommendation.md
+
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: bms-release-package
+          path: |
+            bms-validation-summary.md
+            release-recommendation.md
+            open-safety-issues.md
+            all-results/safety-*.json
+            all-results/diagnostic-coverage-report.md

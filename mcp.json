@@ -1,0 +1,161 @@
+{
+  "servers": {
+    "automotive-tools": {
+      "command": "python",
+      "args": ["-m", "automotive.mcp_server"],
+      "cwd": "${workspaceFolder}/tools",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/tools"
+      },
+      "description": "Automotive MCP server providing access to automotive development tools including ADAS perception, AUTOSAR validation, diagnostics, and safety analysis"
+    },
+    "automotive-knowledge": {
+      "command": "node",
+      "args": ["dist/knowledge-server.js"],
+      "cwd": "${workspaceFolder}/knowledge-base",
+      "description": "Automotive knowledge base server providing access to ISO 26262, ISO 21434, AUTOSAR, and ASPICE documentation"
+    }
+  },
+  "tools": {
+    "adas": {
+      "perception": {
+        "description": "ADAS perception pipeline tools",
+        "commands": ["perception-pipeline", "perception-test", "perception-eval"]
+      },
+      "sensor": {
+        "description": "Sensor calibration and fusion",
+        "commands": ["sensor-calibration", "lidar-calibrate", "camera-calibrate", "fusion-validate"]
+      },
+      "planning": {
+        "description": "Motion planning and scenario testing",
+        "commands": ["scenario-generate", "scenario-replay", "odd-define"]
+      }
+    },
+    "autosar": {
+      "classic": {
+        "description": "AUTOSAR Classic Platform tools",
+        "commands": ["swc-generate", "swc-scaffold", "arxml-validate", "rte-check", "bsw-config"]
+      },
+      "adaptive": {
+        "description": "AUTOSAR Adaptive Platform tools",
+        "commands": ["ecu-extract"]
+      }
+    },
+    "safety": {
+      "iso26262": {
+        "description": "ISO 26262 functional safety tools",
+        "commands": ["hara-template", "fmea-generate", "fta-analyze", "asil-decompose", "pmhf-calculate"]
+      },
+      "sotif": {
+        "description": "ISO 21448 SOTIF tools",
+        "commands": ["sotif-hazard-scenario", "sotif-audit"]
+      }
+    },
+    "security": {
+      "iso21434": {
+        "description": "ISO 21434 cybersecurity tools",
+        "commands": ["tara-analyze", "vuln-scan", "crypto-audit", "sbom-generate"]
+      },
+      "certificates": {
+        "description": "PKI and certificate management",
+        "commands": ["certificate-manage"]
+      }
+    },
+    "diagnostics": {
+      "uds": {
+        "description": "UDS diagnostic services",
+        "commands": ["uds-scan", "dtc-read", "ecu-diagnose"]
+      },
+      "obd": {
+        "description": "OBD-II live data",
+        "commands": ["obd-live-data"]
+      },
+      "flash": {
+        "description": "ECU flashing and calibration",
+        "commands": ["ecu-flash", "flash-sequence", "calibration-flash"]
+      }
+    },
+    "testing": {
+      "hil": {
+        "description": "Hardware-in-the-Loop testing",
+        "commands": ["hil-setup", "hil-launch"]
+      },
+      "sil": {
+        "description": "Software-in-the-Loop testing",
+        "commands": ["sil-run", "sil-test"]
+      },
+      "coverage": {
+        "description": "Test coverage analysis",
+        "commands": ["coverage-report", "mcdc-check"]
+      }
+    },
+    "network": {
+      "can": {
+        "description": "CAN bus analysis",
+        "commands": ["can-monitor", "network-sim"]
+      },
+      "ethernet": {
+        "description": "Automotive Ethernet tools",
+        "commands": ["ethernet-diag", "doip-scan", "someip-discover"]
+      }
+    },
+    "battery": {
+      "bms": {
+        "description": "Battery Management System tools",
+        "commands": ["soh-estimate", "cell-balance", "thermal-profile", "degradation-predict"]
+      },
+      "charging": {
+        "description": "Charging simulation and analysis",
+        "commands": ["charging-simulate", "charging-curve", "grid-impact"]
+      }
+    },
+    "compliance": {
+      "aspice": {
+        "description": "ASPICE audit tools",
+        "commands": ["aspice-audit"]
+      },
+      "homologation": {
+        "description": "Regulatory compliance checks",
+        "commands": ["homologation-check", "unr155-assess", "iso26262-checklist", "misra-report"]
+      }
+    }
+  },
+  "resources": {
+    "standards": {
+      "iso26262": {
+        "path": "${workspaceFolder}/knowledge-base/standards/iso-26262",
+        "description": "ISO 26262 Functional Safety standard documentation"
+      },
+      "iso21434": {
+        "path": "${workspaceFolder}/knowledge-base/standards/iso-21434",
+        "description": "ISO 21434 Cybersecurity standard documentation"
+      },
+      "iso21448": {
+        "path": "${workspaceFolder}/knowledge-base/standards/iso-21448",
+        "description": "ISO 21448 SOTIF standard documentation"
+      },
+      "autosar": {
+        "path": "${workspaceFolder}/knowledge-base/standards/autosar",
+        "description": "AUTOSAR Classic and Adaptive platform specifications"
+      },
+      "aspice": {
+        "path": "${workspaceFolder}/knowledge-base/standards/aspice",
+        "description": "Automotive SPICE process assessment model"
+      }
+    },
+    "templates": {
+      "safety": {
+        "path": "${workspaceFolder}/templates/safety",
+        "description": "Safety analysis templates (HARA, FMEA, FTA)"
+      },
+      "security": {
+        "path": "${workspaceFolder}/templates/security",
+        "description": "Security analysis templates (TARA, threat catalog)"
+      },
+      "autosar": {
+        "path": "${workspaceFolder}/templates/autosar",
+        "description": "AUTOSAR SWC and BSW templates"
+      }
+    }
+  }
+}

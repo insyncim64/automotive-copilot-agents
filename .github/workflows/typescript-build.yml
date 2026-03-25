@@ -1,0 +1,110 @@
+name: TypeScript Build and Test
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'knowledge-base/**'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'knowledge-base/**'
+
+defaults:
+  run:
+    working-directory: ./knowledge-base
+
+jobs:
+  build:
+    name: Build TypeScript Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: knowledge-base/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile TypeScript
+        run: npm run build
+
+      - name: Verify compiled output
+        run: |
+          if [ ! -f dist/knowledge-server.js ]; then
+            echo "ERROR: Compiled output not found"
+            exit 1
+          fi
+          echo "Build successful: dist/knowledge-server.js exists"
+
+      - name: Run TypeScript strict mode check
+        run: npx tsc --noEmit --strict
+
+  lint:
+    name: Lint TypeScript Code
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: knowledge-base/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint (if configured)
+        run: npm run lint || echo "No lint script configured"
+
+  test:
+    name: Test MCP Server
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: knowledge-base/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test MCP initialize
+        run: |
+          echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}' | \
+          node dist/knowledge-server.js | \
+          jq -e '.result.serverInfo.name == "automotive-knowledge"'
+
+      - name: Test resources/list
+        run: |
+          echo '{"jsonrpc":"2.0","id":2,"method":"resources/list","params":{}}' | \
+          node dist/knowledge-server.js | \
+          jq -e '.result.resources | length == 8'
+
+      - name: Test tools/list
+        run: |
+          echo '{"jsonrpc":"2.0","id":3,"method":"tools/list","params":{}}' | \
+          node dist/knowledge-server.js | \
+          jq -e '.result.tools | length == 3'

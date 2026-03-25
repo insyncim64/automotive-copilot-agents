@@ -1,0 +1,296 @@
+name: AUTOSAR RTE Generation
+version: 1.0.0
+description: "AUTOSAR Runtime Environment generation workflow for creating the middleware layer connecting SWCs to BSW"
+
+on:
+  push:
+    branches: [develop, release/*]
+    paths:
+      - 'arxml/**/*.arxml'
+      - 'config/autosar/**/*.arxml'
+      - 'config/rte/**/*.yaml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'arxml/**/*.arxml'
+      - 'config/autosar/**/*.arxml'
+
+env:
+  AUTOSAR_VERSION: 'R22-11'
+  PLATFORM: 'Classic'
+
+jobs:
+  input-validation:
+    name: Input Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up AUTOSAR tools
+        run: |
+          pip install -r requirements-autosar.txt
+
+      - name: Validate ARXML schema
+        run: |
+          python tools/validate_arxml.py \
+            --input arxml/ \
+            --schema config/autosar/AUTOSAR_${{ env.AUTOSAR_VERSION }}.xsd \
+            --output validation-report.json
+
+      - name: Verify port interface compatibility
+        run: |
+          python tools/check_port_compatibility.py \
+            --arxml arxml/swc/ \
+            --output port-compatibility-report.md
+
+      - name: Validate runnable-to-task mapping
+        run: |
+          python tools/validate_runnable_mapping.py \
+            --arxml arxml/ecu-extract/ \
+            --os-config config/os/tasks.yaml \
+            --output runnable-mapping-report.md
+
+      - name: Validate timing consistency
+        run: |
+          python tools/check_timing.py \
+            --arxml arxml/ \
+            --os-tick-ms 10 \
+            --output timing-report.md
+
+      - name: Upload validation reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: input-validation-reports
+          path: |
+            validation-report.json
+            port-compatibility-report.md
+            runnable-mapping-report.md
+            timing-report.md
+
+  rte-configuration:
+    name: RTE Configuration
+    runs-on: ubuntu-latest
+    needs: input-validation
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download validation reports
+        uses: actions/download-artifact@v4
+        with:
+          name: input-validation-reports
+          path: reports/
+
+      - name: Configure RTE generation mode
+        run: |
+          python tools/configure_rte.py \
+            --mode full \
+            --input arxml/ \
+            --output config/rte/rte-generation-config.yaml
+
+      - name: Configure data consistency mechanisms
+        run: |
+          python tools/configure_consistency.py \
+            --arxml arxml/swc/ \
+            --safety-level ASIL-B \
+            --output config/rte/consistency-config.yaml
+
+      - name: Calculate buffer allocation
+        run: |
+          python tools/calculate_buffers.py \
+            --ports arxml/ports/ \
+            --queued-ports config/rte/queued-ports.yaml \
+            --output buffer-allocation.md
+
+      - name: Estimate resource usage
+        run: |
+          python tools/estimate_resources.py \
+            --config config/rte/rte-generation-config.yaml \
+            --target-hw config/hw/ecu-spec.yaml \
+            --output resource-estimate.md
+
+      - name: Upload configuration
+        uses: actions/upload-artifact@v4
+        with:
+          name: rte-configuration
+          path: |
+            config/rte/
+            buffer-allocation.md
+            resource-estimate.md
+
+  code-generation:
+    name: Code Generation
+    runs-on: ubuntu-latest
+    needs: rte-configuration
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download configuration
+        uses: actions/download-artifact@v4
+        with:
+          name: rte-configuration
+          path: config/
+
+      - name: Execute RTE generator
+        run: |
+          python tools/generate_rte.py \
+            --input arxml/ \
+            --config config/rte/rte-generation-config.yaml \
+            --output generated/rte/ \
+            --log generation.log
+
+      - name: Review generation log
+        run: |
+          python tools/analyze_generation_log.py \
+            --log generation.log \
+            --warnings-as-errors \
+            --output generation-analysis.md
+
+      - name: Verify generated artifacts
+        run: |
+          python tools/verify_generated.py \
+            --expected config/rte/expected-artifacts.yaml \
+            --actual generated/rte/ \
+            --output artifact-verification.md
+
+      - name: Compare with previous version
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: previous/
+
+      - name: Generate code diff report
+        run: |
+          diff -r previous/generated/rte/ generated/rte/ > rte-diff.txt || true
+          python tools/summarize_diff.py \
+            --diff rte-diff.txt \
+            --output rte-changes.md
+
+      - name: Analyze code size
+        run: |
+          python tools/analyze_code_size.py \
+            --source generated/rte/ \
+            --budget config/hw/memory-budget.yaml \
+            --output code-size-report.md
+
+      - name: Upload generated RTE
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-rte
+          path: |
+            generated/rte/
+            generation.log
+            rte-changes.md
+            code-size-report.md
+
+  integration-build:
+    name: Integration Build
+    runs-on: ubuntu-latest
+    needs: code-generation
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download generated RTE
+        uses: actions/download-artifact@v4
+        with:
+          name: generated-rte
+          path: generated/rte/
+
+      - name: Set up cross-compiler
+        uses: ./.github/actions/setup-cross-Compiler
+        with:
+          target: ${{ vars.TARGET_ARCH }}
+          toolchain: ${{ vars.TOOLCHAIN_VERSION }}
+
+      - name: Compile RTE
+        run: |
+          cmake -B build -DCMAKE_TOOLCHAIN_FILE=toolchain-${{ vars.TARGET_ARCH }}.cmake
+          cmake --build build --target rte
+
+      - name: Compile SWCs
+        run: |
+          cmake --build build --target swcs
+
+      - name: Compile BSW
+        run: |
+          cmake --build build --target bsw
+
+      - name: Link ECU binary
+        run: |
+          cmake --build build --target ecu_binary
+
+      - name: Verify no unresolved symbols
+        run: |
+          nm build/bin/ecu_binary.elf | grep ' U ' > unresolved.txt || true
+          python tools/check_unresolved.py \
+            --unresolved unresolved.txt \
+            --allowed config/allowed-unresolved.txt
+
+      - name: Analyze memory map
+        run: |
+          python tools/analyze_memory_map.py \
+            --map build/bin/ecu_binary.map \
+            --budget config/hw/memory-budget.yaml \
+            --output memory-map-report.md
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecu-binary
+          path: |
+            build/bin/ecu_binary.elf
+            build/bin/ecu_binary.map
+            memory-map-report.md
+
+  rte-verification:
+    name: RTE Verification
+    runs-on: ubuntu-latest
+    needs: integration-build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download ECU binary
+        uses: actions/download-artifact@v4
+        with:
+          name: ecu-binary
+          path: build/bin/
+
+      - name: Run unit tests for RTE APIs
+        run: |
+          python -m pytest tests/rte/unit/ \
+            --junitxml=results/unit-results.xml
+
+      - name: Verify sender-receiver data transfer
+        run: |
+          python tests/rte/test_sr_transfer.py \
+            --binary build/bin/ecu_binary.elf \
+            --output results/sr-transfer-results.md
+
+      - name: Verify client-server call routing
+        run: |
+          python tests/rte/test_cs_routing.py \
+            --binary build/bin/ecu_binary.elf \
+            --output results/cs-routing-results.md
+
+      - name: Test mode switch notifications
+        run: |
+          python tests/rte/test_mode_switch.py \
+            --binary build/bin/ecu_binary.elf \
+            --output results/mode-switch-results.md
+
+      - name: Measure RTE overhead
+        run: |
+          python tests/rte/measure_overhead.py \
+            --binary build/bin/ecu_binary.elf \
+            --output results/rte-overhead.md
+
+      - name: Upload verification results
+        uses: actions/upload-artifact@v4
+        with:
+          name: rte-verification-results
+          path: |
+            results/

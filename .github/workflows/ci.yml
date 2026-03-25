@@ -1,0 +1,169 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  validate-mcp-invocations:
+    name: Validate MCP Tool Invocations
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install validation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install jsonschema pyyaml
+
+      - name: Validate MCP invocation JSON-RPC format
+        run: |
+          python scripts/validate_mcp_invocations.py \
+            examples/bms-safety-analysis/mcp-invocations.json \
+            examples/autosar-swc-demo/mcp-invocations.json \
+            examples/adas-perception-pipeline/mcp-invocations.json
+
+      - name: Validate traceability mappings
+        run: |
+          python scripts/validate_traceability.py \
+            examples/bms-safety-analysis/mcp-invocations.json \
+            examples/autosar-swc-demo/mcp-invocations.json \
+            examples/adas-perception-pipeline/mcp-invocations.json
+
+  validate-documentation:
+    name: Validate Documentation Structure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install validation dependencies
+        run: |
+          pip install pyyaml markdown-it-py
+
+      - name: Validate example project structure
+        run: |
+          python scripts/validate_project_structure.py \
+            examples/bms-safety-analysis \
+            examples/autosar-swc-demo \
+            examples/adas-perception-pipeline
+
+      - name: Validate markdown syntax
+        run: |
+          python scripts/validate_markdown.py \
+            examples/bms-safety-analysis/*.md \
+            examples/autosar-swc-demo/*.md \
+            examples/adas-perception-pipeline/*.md
+
+  validate-safety-artifacts:
+    name: Validate Safety Analysis Artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install validation dependencies
+        run: |
+          pip install pyyaml jsonschema
+
+      - name: Validate HARA entries (BMS example)
+        run: |
+          python scripts/validate_hara.py \
+            examples/bms-safety-analysis/03-hara-report.md
+
+      - name: Validate FMEA entries (BMS example)
+        run: |
+          python scripts/validate_fmea.py \
+            examples/bms-safety-analysis/04-fmea-report.md
+
+      - name: Validate FTA entries (BMS example)
+        run: |
+          python scripts/validate_fta.py \
+            examples/bms-safety-analysis/05-fta-report.md
+
+      - name: Validate ASIL decomposition (BMS example)
+        run: |
+          python scripts/validate_asil_decomposition.py \
+            examples/bms-safety-analysis/06-asil-decomposition.md
+
+  validate-automotive-standards:
+    name: Validate Automotive Standards Compliance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install validation dependencies
+        run: |
+          pip install pyyaml
+
+      - name: Validate AUTOSAR SWC structure
+        run: |
+          python scripts/validate_autosar_swc.py \
+            examples/autosar-swc-demo/
+
+      - name: Validate ADAS ODD definition (ISO 21448)
+        run: |
+          python scripts/validate_odd.py \
+            examples/adas-perception-pipeline/01-odd-definition.md
+
+      - name: Validate calibration report (ISO 16505)
+        run: |
+          python scripts/validate_calibration.py \
+            examples/adas-perception-pipeline/02-sensor-calibration-report.md
+
+      - name: Validate fusion configuration
+        run: |
+          python scripts/validate_fusion_config.py \
+            examples/adas-perception-pipeline/03-sensor-fusion-config.md
+
+  coverage-report:
+    name: Generate Validation Coverage Report
+    runs-on: ubuntu-latest
+    needs: [validate-mcp-invocations, validate-documentation, validate-safety-artifacts, validate-automotive-standards]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate coverage report
+        run: |
+          python scripts/generate_coverage_report.py \
+            --output coverage-report.md \
+            examples/bms-safety-analysis \
+            examples/autosar-swc-demo \
+            examples/adas-perception-pipeline
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-coverage-report
+          path: coverage-report.md
+          retention-days: 30

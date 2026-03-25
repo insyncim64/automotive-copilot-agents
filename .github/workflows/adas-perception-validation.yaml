@@ -1,0 +1,279 @@
+name: ADAS Perception Validation
+version: 1.0.0
+description: "Comprehensive validation workflow for ADAS perception algorithms including object detection, classification, and tracking"
+
+on:
+  push:
+    branches: [develop, release/*]
+    paths:
+      - 'src/perception/**'
+      - 'tests/perception/**'
+      - 'models/**'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'src/perception/**'
+      - 'tests/perception/**'
+
+env:
+  SAFETY_LEVEL: ASIL-B
+  PYTHON_VERSION: '3.10'
+
+jobs:
+  dataset-preparation:
+    name: Dataset Preparation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dataset tools
+        run: |
+          pip install -r requirements-dataset.txt
+
+      - name: Validate dataset coverage
+        run: |
+          python tools/validate_dataset.py \
+            --input data/raw \
+            --output data/validated \
+            --check-odd-coverage \
+            --min-samples-per-class 1000
+
+      - name: Check annotation quality
+        run: |
+          python tools/check_annotations.py \
+            --data data/validated \
+            --inter-annotator-threshold 0.90 \
+            --report dataset-quality-report.json
+
+      - name: Generate dataset statistics
+        run: |
+          python tools/dataset_stats.py \
+            --data data/validated \
+            --output dataset-stats.md
+
+      - name: Upload dataset report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dataset-preparation-report
+          path: |
+            dataset-quality-report.json
+            dataset-stats.md
+
+  offline-evaluation:
+    name: Offline Evaluation
+    runs-on: gpu-latest
+    needs: dataset-preparation
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install perception dependencies
+        run: |
+          pip install -r requirements-perception.txt
+
+      - name: Download validated dataset
+        uses: actions/download-artifact@v4
+        with:
+          name: dataset-preparation-report
+          path: reports/
+
+      - name: Run perception on test dataset
+        run: |
+          python tests/perception/run_inference.py \
+            --model models/perception/latest \
+            --dataset data/validated/test \
+            --output results/offline
+
+      - name: Compute detection metrics
+        run: |
+          python tools/compute_metrics.py \
+            --results results/offline \
+            --ground-truth data/validated/test/annotations \
+            --output metrics-detection.json
+
+      - name: Compute tracking metrics
+        run: |
+          python tools/compute_tracking_metrics.py \
+            --results results/offline \
+            --output metrics-tracking.json
+
+      - name: Compare against baseline
+        run: |
+          python tools/regression_check.py \
+            --current metrics-detection.json \
+            --baseline models/baseline/metrics.json \
+            --fail-on-regression \
+            --output regression-report.md
+
+      - name: Validate KPIs
+        run: |
+          python tools/validate_kpis.py \
+            --metrics metrics-detection.json \
+            --thresholds config/perception-kpis.yaml \
+            --fail-if-below-threshold
+
+      - name: Upload evaluation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-evaluation-results
+          path: |
+            metrics-detection.json
+            metrics-tracking.json
+            regression-report.md
+
+  simulation-testing:
+    name: Simulation Testing
+    runs-on: ubuntu-latest
+    needs: offline-evaluation
+    container:
+      image: ghcr.io/automotive-copilot-agents/simulation:latest
+      options: --privileged
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run nominal scenarios
+        run: |
+          python tests/simulation/run_scenarios.py \
+            --scenarios scenarios/nominal \
+            --output results/simulation/nominal \
+            --latency-check
+
+      - name: Run adverse weather scenarios
+        run: |
+          python tests/simulation/run_scenarios.py \
+            --scenarios scenarios/weather/{rain,fog,snow} \
+            --output results/simulation/weather
+
+      - name: Run rare object scenarios
+        run: |
+          python tests/simulation/run_scenarios.py \
+            --scenarios scenarios/rare-objects \
+            --output results/simulation/rare
+
+      - name: Validate latency requirements
+        run: |
+          python tools/check_latency.py \
+            --results results/simulation \
+            --max-latency-ms 100 \
+            --fail-if-exceeded
+
+      - name: Generate coverage report
+        run: |
+          python tools/simulation_coverage.py \
+            --scenarios scenarios/ \
+            --results results/simulation/ \
+            --output simulation-coverage.md
+
+      - name: Upload simulation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulation-testing-results
+          path: |
+            results/simulation/
+            simulation-coverage.md
+
+  vehicle-integration:
+    name: Vehicle Integration Testing
+    runs-on: self-hosted
+    needs: simulation-testing
+    environment: vehicle-test-bench
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build perception for target ECU
+        run: |
+          cmake -B build -DCMAKE_TOOLCHAIN_FILE=toolchain-ecu.cmake
+          cmake --build build --target perception_ecu
+
+      - name: Flash ECU
+        run: |
+          python tools/flash_ecu.py \
+            --target ${{ vars.ECU_TARGET }} \
+            --binary build/perception_ecu.bin \
+            --verify
+
+      - name: Execute test track scenarios
+        run: |
+          python tests/vehicle/test_track.py \
+            --route test-track \
+            --known-objects config/test-objects.yaml \
+            --output results/vehicle/test-track
+
+      - name: Execute urban road test
+        run: |
+          python tests/vehicle/urban_test.py \
+            --route urban-standard \
+            --output results/vehicle/urban
+
+      - name: Monitor resource utilization
+        run: |
+          python tools/monitor_resources.py \
+            --ecu ${{ vars.ECU_TARGET }} \
+            --duration 4h \
+            --output results/vehicle/resource-usage.json
+
+      - name: Validate vehicle test results
+        run: |
+          python tools/validate_vehicle_results.py \
+            --results results/vehicle/ \
+            --thresholds config/vehicle-kpis.yaml
+
+      - name: Upload vehicle results
+        uses: actions/upload-artifact@v4
+        with:
+          name: vehicle-integration-results
+          path: |
+            results/vehicle/
+
+  release-approval:
+    name: Release Approval
+    runs-on: ubuntu-latest
+    needs: [offline-evaluation, simulation-testing, vehicle-integration]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    steps:
+      - name: Download all results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-results'
+          path: all-results/
+
+      - name: Compile validation summary
+        run: |
+          python tools/compile_validation_report.py \
+            --inputs all-results/ \
+            --output validation-summary.md
+
+      - name: Check open issues
+        run: |
+          gh issue list --label "perception" --state open > open-issues.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate release recommendation
+        run: |
+          python tools/generate_release_recommendation.py \
+            --summary validation-summary.md \
+            --issues open-issues.md \
+            --output release-recommendation.md
+
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-package
+          path: |
+            validation-summary.md
+            release-recommendation.md
+            open-issues.md

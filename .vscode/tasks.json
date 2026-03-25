@@ -1,0 +1,447 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Install Agents",
+            "type": "shell",
+            "windows": {
+                "command": "${workspaceFolder}\\scripts\\setup.ps1",
+                "args": []
+            },
+            "linux": {
+                "command": "${workspaceFolder}/scripts/setup.sh",
+                "args": []
+            },
+            "osx": {
+                "command": "${workspaceFolder}/scripts/setup.sh",
+                "args": []
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [],
+            "detail": "Install automotive copilot agents to .github/copilot directory"
+        },
+        {
+            "label": "Install Agents (Dry Run)",
+            "type": "shell",
+            "windows": {
+                "command": "${workspaceFolder}\\scripts\\setup.ps1",
+                "args": ["-DryRun"]
+            },
+            "linux": {
+                "command": "${workspaceFolder}/scripts/setup.sh",
+                "args": ["--dry-run"]
+            },
+            "osx": {
+                "command": "${workspaceFolder}/scripts/setup.sh",
+                "args": ["--dry-run"]
+            },
+            "group": "build",
+            "problemMatcher": [],
+            "detail": "Preview installation without making changes"
+        },
+        {
+            "label": "Check Installation Status",
+            "type": "shell",
+            "windows": {
+                "command": "${workspaceFolder}\\scripts\\setup.ps1",
+                "args": ["-Status"]
+            },
+            "linux": {
+                "command": "${workspaceFolder}/scripts/setup.sh",
+                "args": ["--status"]
+            },
+            "osx": {
+                "command": "${workspaceFolder}/scripts/setup.sh",
+                "args": ["--status"]
+            },
+            "group": "build",
+            "problemMatcher": [],
+            "detail": "Show current installation status and agent count"
+        },
+        {
+            "label": "Uninstall Agents",
+            "type": "shell",
+            "windows": {
+                "command": "${workspaceFolder}\\scripts\\setup.ps1",
+                "args": ["-Uninstall"]
+            },
+            "linux": {
+                "command": "${workspaceFolder}/scripts/setup.sh",
+                "args": ["--uninstall"]
+            },
+            "osx": {
+                "command": "${workspaceFolder}/scripts/setup.sh",
+                "args": ["--uninstall"]
+            },
+            "group": "build",
+            "problemMatcher": [],
+            "detail": "Remove automotive copilot agents from .github/copilot directory"
+        },
+        {
+            "label": "Validate Installation",
+            "type": "shell",
+            "windows": {
+                "command": "${workspaceFolder}\\scripts\\validate-install.ps1",
+                "args": []
+            },
+            "linux": {
+                "command": "echo 'Use setup.sh --status on Linux/Mac'",
+                "args": []
+            },
+            "osx": {
+                "command": "echo 'Use setup.sh --status on Linux/Mac'",
+                "args": []
+            },
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Validate installation integrity and completeness"
+        },
+        {
+            "label": "Validate Installation (Verbose)",
+            "type": "shell",
+            "windows": {
+                "command": "${workspaceFolder}\\scripts\\validate-install.ps1",
+                "args": ["-Verbose"]
+            },
+            "linux": {
+                "command": "echo 'Use setup.sh --status --verbose on Linux/Mac'",
+                "args": []
+            },
+            "osx": {
+                "command": "echo 'Use setup.sh --status --verbose on Linux/Mac'",
+                "args": []
+            },
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Validate installation with detailed agent/skill/knowledge listing"
+        },
+        {
+            "label": "Validate Installation (JSON Output)",
+            "type": "shell",
+            "windows": {
+                "command": "${workspaceFolder}\\scripts\\validate-install.ps1",
+                "args": ["-OutputFormat", "json"]
+            },
+            "linux": {
+                "command": "echo 'Use setup.sh --status --format json on Linux/Mac'",
+                "args": []
+            },
+            "osx": {
+                "command": "echo 'Use setup.sh --status --format json on Linux/Mac'",
+                "args": []
+            },
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Export validation results to JSON for CI/CD integration"
+        },
+        {
+            "label": "Validate Installation (JUnit XML)",
+            "type": "shell",
+            "windows": {
+                "command": "${workspaceFolder}\\scripts\\validate-install.ps1",
+                "args": ["-OutputFormat", "junit"]
+            },
+            "linux": {
+                "command": "echo 'Use setup.sh --status --format junit on Linux/Mac'",
+                "args": []
+            },
+            "osx": {
+                "command": "echo 'Use setup.sh --status --format junit on Linux/Mac'",
+                "args": []
+            },
+            "group": "test",
+            "problemMatcher": {
+                "owner": "powershell",
+                "fileLocation": ["relative", "${workspaceFolder}"],
+                "pattern": {
+                    "regexp": "^\\[ERROR\\] (.+)$",
+                    "message": 1
+                }
+            },
+            "detail": "Export validation results to JUnit XML for CI/CD pipelines"
+        },
+        {
+            "label": "ADAS: Run Perception Pipeline Test",
+            "type": "shell",
+            "command": "echo 'Perception pipeline test - configure with your simulation environment'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Test sensor fusion pipeline (EKF/UKF) with recorded scenarios"
+        },
+        {
+            "label": "ADAS: Validate Sensor Calibration",
+            "type": "shell",
+            "command": "echo 'Sensor calibration validation - configure with your calibration tools'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Validate camera-radar-lidar extrinsic calibration"
+        },
+        {
+            "label": "ADAS: SOTIF Scenario Testing",
+            "type": "shell",
+            "command": "echo 'SOTIF testing - configure with CARLA or VTD simulation'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Test triggering conditions (rain, fog, sun glare, tunnel transitions)"
+        },
+        {
+            "label": "AUTOSAR: Validate ARXML Configuration",
+            "type": "shell",
+            "command": "echo 'ARXML validation - configure with DaVinci Configurator or EB tresos'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Validate AUTOSAR system description and BSW configuration"
+        },
+        {
+            "label": "AUTOSAR: Generate RTE Code",
+            "type": "shell",
+            "command": "echo 'RTE generation - configure with your AUTOSAR toolchain'",
+            "args": [],
+            "group": "build",
+            "problemMatcher": [],
+            "detail": "Generate Runtime Environment code from system description"
+        },
+        {
+            "label": "AUTOSAR: Check BSW Module Consistency",
+            "type": "shell",
+            "command": "echo 'BSW consistency check - configure with vector tools'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Verify Basic Software module configuration consistency"
+        },
+        {
+            "label": "Diagnostics: UDS Service Scan",
+            "type": "shell",
+            "command": "echo 'UDS scan - configure with vector canoe or peak tools'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Scan available UDS services (0x10, 0x11, 0x22, 0x27, 0x2E, 0x31)"
+        },
+        {
+            "label": "Diagnostics: Read Active DTCs",
+            "type": "shell",
+            "command": "echo 'DTC read - configure with UDS 0x19 service'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Read active and stored diagnostic trouble codes"
+        },
+        {
+            "label": "Diagnostics: OBD Live Data Stream",
+            "type": "shell",
+            "command": "echo 'OBD streaming - configure with ISO 15031-5 PID requests'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Stream live OBD data (RPM, speed, load, temperature, fuel trim)"
+        },
+        {
+            "label": "Diagnostics: Security Access Test",
+            "type": "shell",
+            "command": "echo 'Security access - configure with UDS 0x27 seed-key'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Test UDS security access level 1-6 with seed-key algorithm"
+        },
+        {
+            "label": "BMS: Run Battery Simulation",
+            "type": "shell",
+            "command": "echo 'Battery simulation - configure with your cell model'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Simulate battery pack behavior (SOC, SOH, thermal, aging)"
+        },
+        {
+            "label": "BMS: Thermal Profile Analysis",
+            "type": "shell",
+            "command": "echo 'Thermal analysis - configure with your thermal model'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Analyze cell temperature distribution and cooling performance"
+        },
+        {
+            "label": "BMS: SOH Estimation Validation",
+            "type": "shell",
+            "command": "echo 'SOH validation - configure with degradation model'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Validate state-of-health estimation algorithms"
+        },
+        {
+            "label": "BMS: Cell Balancing Test",
+            "type": "shell",
+            "command": "echo 'Cell balancing test - configure with balancing strategy'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Test passive/active cell balancing algorithms"
+        },
+        {
+            "label": "Powertrain: Engine Mapping Validation",
+            "type": "shell",
+            "command": "echo 'Engine mapping - configure with ECU calibration tools'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Validate air-fuel ratio, ignition timing, boost pressure maps"
+        },
+        {
+            "label": "Powertrain: Transmission Shift Calibration",
+            "type": "shell",
+            "command": "echo 'Transmission calibration - configure with TCM tools'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Calibrate shift points, shift quality, torque converter lockup"
+        },
+        {
+            "label": "Chassis: Brake Balance Analysis",
+            "type": "shell",
+            "command": "echo 'Brake balance - configure with vehicle dynamics model'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Analyze front-rear brake distribution under various conditions"
+        },
+        {
+            "label": "Chassis: Suspension Tuning",
+            "type": "shell",
+            "command": "echo 'Suspension tuning - configure with damper/spring model'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Tune damper coefficients, spring rates, anti-roll bars"
+        },
+        {
+            "label": "Safety: Run FMEA Analysis",
+            "type": "shell",
+            "command": "echo 'FMEA analysis - configure with your FMEA tool (APIS, IQS)",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Perform Failure Mode and Effects Analysis per ISO 26262"
+        },
+        {
+            "label": "Safety: Run FTA Analysis",
+            "type": "shell",
+            "command": "echo 'FTA analysis - configure with fault tree tool'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Perform Fault Tree Analysis for top-level hazards"
+        },
+        {
+            "label": "Safety: Verify ASIL Decomposition",
+            "type": "shell",
+            "command": "echo 'ASIL decomposition - review independence measures'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Verify ASIL decomposition independence and DFA results"
+        },
+        {
+            "label": "Security: Run TARA Analysis",
+            "type": "shell",
+            "command": "echo 'TARA analysis - configure with threat modeling tool'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Perform Threat Analysis and Risk Assessment per ISO 21434"
+        },
+        {
+            "label": "Security: Penetration Test Scan",
+            "type": "shell",
+            "command": "echo 'Penetration test - configure with authorized security tools'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Run authorized penetration testing on vehicle interfaces"
+        },
+        {
+            "label": "Security: Verify Secure Boot Chain",
+            "type": "shell",
+            "command": "echo 'Secure boot verification - check HSM configuration'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Verify secure boot chain integrity and signature validation"
+        },
+        {
+            "label": "Validation: Run Unit Test Suite",
+            "type": "shell",
+            "command": "ctest --output-on-failure",
+            "args": [],
+            "group": "test",
+            "problemMatcher": {
+                "owner": "gcc",
+                "fileLocation": ["relative", "${workspaceFolder}"],
+                "pattern": {
+                    "regexp": "^(.+):(\\d+):(\\d+):\\s+(?:error|warning):\\s+(.+)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "message": 4
+                }
+            },
+            "detail": "Run CTest unit test suite with failure output"
+        },
+        {
+            "label": "Validation: Run Integration Tests",
+            "type": "shell",
+            "command": "ctest -L integration --output-on-failure",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Run integration test suite (labeled 'integration')"
+        },
+        {
+            "label": "Validation: Generate Coverage Report",
+            "type": "shell",
+            "command": "gcovr --xml-pretty -o coverage.xml --html-details coverage/index.html",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Generate code coverage report with gcovr"
+        },
+        {
+            "label": "Validation: MISRA C:2012 Check",
+            "type": "shell",
+            "command": "echo 'MISRA check - configure with cppcheck, Polyspace, or QAC'",
+            "args": [],
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Run MISRA C:2012 static analysis"
+        },
+        {
+            "label": "Documentation: Generate Agent Catalog",
+            "type": "shell",
+            "command": "python scripts/generate-agent-catalog.py",
+            "args": [],
+            "group": "docs",
+            "problemMatcher": [],
+            "detail": "Generate documentation/AGENT-CATALOG.md from agent files"
+        },
+        {
+            "label": "Documentation: Build All Docs",
+            "type": "shell",
+            "command": "mkdocs build",
+            "args": [],
+            "group": "docs",
+            "problemMatcher": [],
+            "detail": "Build full documentation site with MkDocs"
+        }
+    ]
+}

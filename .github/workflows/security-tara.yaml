@@ -1,0 +1,319 @@
+name: Security TARA Analysis
+version: 1.0.0
+description: "Automotive cybersecurity threat analysis and risk assessment workflow per ISO/SAE 21434"
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'security/assets/**'
+      - 'security/threats/**'
+      - 'architecture/**/*.md'
+      - 'config/security/**/*.yaml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'security/**'
+  schedule:
+    # Quarterly TARA review
+    - cron: '0 0 1 1,4,7,10 *'
+
+env:
+  SECURITY_STANDARD: 'ISO/SAE 21434'
+
+jobs:
+  asset-identification:
+    name: Asset Identification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up TARA tools
+        run: |
+          pip install -r requirements-security.txt
+
+      - name: Enumerate ECUs and components
+        run: |
+          python tools/enumerate_assets.py \
+            --architecture architecture/ \
+            --output security/assets/ecu-inventory.yaml
+
+      - name: Identify communication interfaces
+        run: |
+          python tools/identify_interfaces.py \
+            --architecture architecture/ \
+            --output security/assets/interfaces.yaml
+
+      - name: Catalog stored data assets
+        run: |
+          python tools/catalog_data_assets.py \
+            --architecture architecture/ \
+            --output security/assets/data-assets.yaml
+
+      - name: Classify assets by CIA triad
+        run: |
+          python tools/classify_assets.py \
+            --assets security/assets/ \
+            --criteria config/security/classification-criteria.yaml \
+            --output security/assets/classified-assets.yaml
+
+      - name: Map data flows with trust boundaries
+        run: |
+          python tools/map_data_flows.py \
+            --assets security/assets/ \
+            --architecture architecture/ \
+            --output security/assets/data-flow-diagram.yaml
+
+      - name: Generate asset dependency map
+        run: |
+          python tools/generate_dependency_map.py \
+            --assets security/assets/ \
+            --output security/assets/dependency-map.md
+
+      - name: Upload asset inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: asset-inventory
+          path: |
+            security/assets/
+
+  threat-identification:
+    name: Threat Identification
+    runs-on: ubuntu-latest
+    needs: asset-identification
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download asset inventory
+        uses: actions/download-artifact@v4
+        with:
+          name: asset-inventory
+          path: security/assets/
+
+      - name: Set up TARA tools
+        run: |
+          pip install -r requirements-security.txt
+
+      - name: Apply STRIDE analysis
+        run: |
+          python tools/stride_analysis.py \
+            --assets security/assets/ \
+            --data-flows security/assets/data-flow-diagram.yaml \
+            --output security/threats/stride-catalog.yaml
+
+      - name: Cross-reference with automotive CVEs
+        run: |
+          python tools/cve_cross_reference.py \
+            --assets security/assets/ \
+            --cve-database data/automotive-cves.json \
+            --output security/threats/cve-mapping.yaml
+
+      - name: Generate attack trees for critical assets
+        run: |
+          python tools/generate_attack_trees.py \
+            --assets security/assets/classified-assets.yaml \
+            --critical-only \
+            --output security/threats/attack-trees/
+
+      - name: Document threat scenarios
+        run: |
+          python tools/document_threats.py \
+            --threats security/threats/stride-catalog.yaml \
+            --attack-trees security/threats/attack-trees/ \
+            --output security/threats/threat-catalog.md
+
+      - name: Upload threat catalog
+        uses: actions/upload-artifact@v4
+        with:
+          name: threat-catalog
+          path: |
+            security/threats/
+
+  risk-assessment:
+    name: Risk Assessment
+    runs-on: ubuntu-latest
+    needs: threat-identification
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download threat catalog
+        uses: actions/download-artifact@v4
+        with:
+          name: threat-catalog
+          path: security/threats/
+
+      - name: Set up TARA tools
+        run: |
+          pip install -r requirements-security.txt
+
+      - name: Assess safety impact
+        run: |
+          python tools/assess_safety_impact.py \
+            --threats security/threats/threat-catalog.yaml \
+            --hara security/safety/hara-report.yaml \
+            --output security/risks/safety-impact.yaml
+
+      - name: Assess financial and operational impact
+        run: |
+          python tools/assess_business_impact.py \
+            --threats security/threats/threat-catalog.yaml \
+            --criteria config/security/impact-criteria.yaml \
+            --output security/risks/business-impact.yaml
+
+      - name: Evaluate attack feasibility
+        run: |
+          python tools/evaluate_feasibility.py \
+            --threats security/threats/threat-catalog.yaml \
+            --methodology SAE-J3061 \
+            --output security/risks/feasibility-assessment.yaml
+
+      - name: Calculate risk levels
+        run: |
+          python tools/calculate_risk.py \
+            --impact security/risks/safety-impact.yaml \
+            --feasibility security/risks/feasibility-assessment.yaml \
+            --matrix config/security/risk-matrix.yaml \
+            --output security/risks/risk-assessment.yaml
+
+      - name: Generate risk matrix visualization
+        run: |
+          python tools/visualize_risk_matrix.py \
+            --risks security/risks/risk-assessment.yaml \
+            --output security/risks/risk-matrix.png
+
+      - name: Generate prioritized threat list
+        run: |
+          python tools/prioritize_threats.py \
+            --risks security/risks/risk-assessment.yaml \
+            --output security/risks/prioritized-threats.md
+
+      - name: Upload risk assessment
+        uses: actions/upload-artifact@v4
+        with:
+          name: risk-assessment
+          path: |
+            security/risks/
+
+  risk-treatment:
+    name: Risk Treatment
+    runs-on: ubuntu-latest
+    needs: risk-assessment
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download risk assessment
+        uses: actions/download-artifact@v4
+        with:
+          name: risk-assessment
+          path: security/risks/
+
+      - name: Set up TARA tools
+        run: |
+          pip install -r requirements-security.txt
+
+      - name: Define cybersecurity goals
+        run: |
+          python tools/define_cybersecurity_goals.py \
+            --risks security/risks/prioritized-threats.md \
+            --unacceptable-threshold HIGH \
+            --output security/goals/cybersecurity-goals.yaml
+
+      - name: Select security controls
+        run: |
+          python tools/select_controls.py \
+            --threats security/risks/prioritized-threats.md \
+            --control-catalog data/security-controls.yaml \
+            --output security/controls/security-controls.yaml
+
+      - name: Evaluate residual risk
+        run: |
+          python tools/evaluate_residual_risk.py \
+            --risks security/risks/risk-assessment.yaml \
+            --controls security/controls/security-controls.yaml \
+            --output security/risks/residual-risk.yaml
+
+      - name: Verify residual risk acceptable
+        run: |
+          python tools/verify_acceptable_risk.py \
+            --residual-risk security/risks/residual-risk.yaml \
+            --thresholds config/security/acceptance-criteria.yaml
+
+      - name: Generate security requirements
+        run: |
+          python tools/generate_security_requirements.py \
+            --goals security/goals/cybersecurity-goals.yaml \
+            --controls security/controls/security-controls.yaml \
+            --output security/requirements/security-requirements.yaml
+
+      - name: Upload security treatment
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-treatment
+          path: |
+            security/goals/
+            security/controls/
+            security/requirements/
+
+  tara-documentation:
+    name: TARA Documentation and Review
+    runs-on: ubuntu-latest
+    needs: risk-treatment
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*'
+          path: tara-inputs/
+
+      - name: Set up TARA tools
+        run: |
+          pip install -r requirements-security.txt
+
+      - name: Compile TARA report
+        run: |
+          python tools/compile_tara_report.py \
+            --inputs tara-inputs/ \
+            --template templates/tara-report.md \
+            --output security/tara-report.md
+
+      - name: Generate traceability matrix
+        run: |
+          python tools/generate_traceability.py \
+            --assets tara-inputs/asset-inventory/security/assets/ \
+            --threats tara-inputs/threat-catalog/security/threats/ \
+            --risks tara-inputs/risk-assessment/security/risks/ \
+            --controls tara-inputs/security-treatment/security/controls/ \
+            --output security/tara-traceability.md
+
+      - name: Create review checklist
+        run: |
+          python tools/create_review_checklist.py \
+            --standard ISO/SAE 21434 \
+            --output security/tara-review-checklist.md
+
+      - name: Upload TARA documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: tara-final
+          path: |
+            security/tara-report.md
+            security/tara-traceability.md
+            security/tara-review-checklist.md
+
+      - name: Create security review issue
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/main')
+        run: |
+          gh issue create \
+            --title "Security TARA Review - $(date +%Y-%m-%d)" \
+            --body "TARA report generated. Please review security/tara-report.md and complete checklist in security/tara-review-checklist.md" \
+            --label "security" \
+            --label "review-required"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

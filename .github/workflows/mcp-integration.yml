@@ -1,0 +1,127 @@
+name: MCP Integration Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+
+jobs:
+  integration-test:
+    name: MCP Server Integration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: knowledge-base/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install TypeScript dependencies
+        run: |
+          cd knowledge-base
+          npm ci
+          npm run build
+
+      - name: Test TypeScript Server Initialization
+        run: |
+          cd knowledge-base
+          RESPONSE=$(echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | node dist/knowledge-server.js)
+          echo "$RESPONSE" | jq -e '.result.serverInfo.name == "automotive-knowledge"' || exit 1
+          echo "$RESPONSE" | jq -e '.result.serverInfo.version == "1.0.0"' || exit 1
+          echo "TypeScript server initialization: PASSED"
+
+      - name: Test TypeScript Server Resources
+        run: |
+          cd knowledge-base
+          RESPONSE=$(echo '{"jsonrpc":"2.0","id":2,"method":"resources/list","params":{}}' | node dist/knowledge-server.js)
+          COUNT=$(echo "$RESPONSE" | jq '.result.resources | length')
+          if [ "$COUNT" -ne 8 ]; then
+            echo "Expected 8 resources, got $COUNT"
+            exit 1
+          fi
+          echo "TypeScript server resources/list: PASSED (8 resources)"
+
+      - name: Test TypeScript Server Tools
+        run: |
+          cd knowledge-base
+          RESPONSE=$(echo '{"jsonrpc":"2.0","id":3,"method":"tools/list","params":{}}' | node dist/knowledge-server.js)
+          COUNT=$(echo "$RESPONSE" | jq '.result.tools | length')
+          if [ "$COUNT" -ne 3 ]; then
+            echo "Expected 3 tools, got $COUNT"
+            exit 1
+          fi
+          echo "TypeScript server tools/list: PASSED (3 tools)"
+
+      - name: Test Python Server Initialization
+        run: |
+          cd tools/automotive
+          RESPONSE=$(echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | python mcp_server.py)
+          echo "$RESPONSE" | python -c "import sys, json; r=json.load(sys.stdin); assert r['result']['serverInfo']['name']=='automotive-tools'" || exit 1
+          echo "Python server initialization: PASSED"
+
+      - name: Test Python Server Tools
+        run: |
+          cd tools/automotive
+          RESPONSE=$(echo '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' | python mcp_server.py)
+          COUNT=$(echo "$RESPONSE" | python -c "import sys, json; r=json.load(sys.stdin); print(len(r['result']['tools']))")
+          if [ "$COUNT" -lt 50 ]; then
+            echo "Expected at least 50 tools, got $COUNT"
+            exit 1
+          fi
+          echo "Python server tools/list: PASSED ($COUNT tools)"
+
+      - name: Test Python Server Resources
+        run: |
+          cd tools/automotive
+          RESPONSE=$(echo '{"jsonrpc":"2.0","id":3,"method":"resources/list","params":{}}' | python mcp_server.py)
+          COUNT=$(echo "$RESPONSE" | python -c "import sys, json; r=json.load(sys.stdin); print(len(r['result']['resources']))")
+          if [ "$COUNT" -ne 8 ]; then
+            echo "Expected 8 resources, got $COUNT"
+            exit 1
+          fi
+          echo "Python server resources/list: PASSED (8 resources)"
+
+  mcp-config-validation:
+    name: Validate MCP Configuration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate mcp.json syntax
+        run: |
+          jq '.' mcp.json > /dev/null || exit 1
+          echo "mcp.json is valid JSON"
+
+      - name: Validate server paths
+        run: |
+          TS_CMD=$(jq -r '.servers["automotive-knowledge"].command' mcp.json)
+          TS_ARGS=$(jq -r '.servers["automotive-knowledge"].args | join(" ")' mcp.json)
+          TS_CWD=$(jq -r '.servers["automotive-knowledge"].cwd' mcp.json)
+          echo "TypeScript server: $TS_CMD $TS_ARGS (cwd: $TS_CWD)"
+
+          PY_CMD=$(jq -r '.servers["automotive-tools"].command' mcp.json)
+          PY_ARGS=$(jq -r '.servers["automotive-tools"].args | join(" ")' mcp.json)
+          PY_CWD=$(jq -r '.servers["automotive-tools"].cwd' mcp.json)
+          echo "Python server: $PY_CMD $PY_ARGS (cwd: $PY_CWD)"
+
+      - name: Check GETTING-STARTED.md consistency
+        run: |
+          grep -q "automotive-knowledge" GETTING-STARTED.md || exit 1
+          grep -q "automotive-tools" GETTING-STARTED.md || exit 1
+          grep -q "mcp.json" GETTING-STARTED.md || exit 1
+          echo "Documentation references MCP servers correctly"

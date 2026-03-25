@@ -1,0 +1,448 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AUTOSAR SWC Development MCP Tool Invocations",
+  "description": "Complete JSON-RPC 2.0 invocations for all AUTOSAR MCP tools used in Engine Control SWC development workflow",
+  "version": "1.0.0",
+  "invocations": [
+    {
+      "step": 1,
+      "tool": "autosar-swc-scaffold",
+      "description": "Generate AUTOSAR SWC skeleton with ports and runnables",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+          "name": "autosar-swc-scaffold",
+          "arguments": {
+            "swc_name": "EngCtrlSwComponentType",
+            "swc_type": "application",
+            "description": "Engine control and monitoring software component",
+            "asil_level": "B",
+            "ports": [
+              {
+                "name": "RP_VehicleSpeed",
+                "direction": "receive",
+                "interface": "SR_VehicleSpeed",
+                "interface_type": "sender-receiver",
+                "data_elements": [
+                  {"name": "Value", "type": "uint16", "unit": "km/h"}
+                ]
+              },
+              {
+                "name": "PP_EngineStatus",
+                "direction": "provide",
+                "interface": "SR_EngineStatus",
+                "interface_type": "sender-receiver",
+                "data_elements": [
+                  {"name": "EngineSpeed", "type": "uint16", "unit": "rpm"},
+                  {"name": "EngineLoad", "type": "uint8", "unit": "percent"},
+                  {"name": "FaultStatus", "type": "uint8", "enum": ["OK", "WARNING", "ERROR"]}
+                ]
+              },
+              {
+                "name": "RP_ThrottlePosition",
+                "direction": "receive",
+                "interface": "SR_ThrottlePosition",
+                "interface_type": "sender-receiver",
+                "data_elements": [
+                  {"name": "Value", "type": "uint8", "unit": "percent"}
+                ]
+              },
+              {
+                "name": "CS_DiagnosticService",
+                "direction": "client",
+                "interface": "CS_DiagnosticService",
+                "interface_type": "client-server",
+                "operations": [
+                  {
+                    "name": "ReadDataByIdentifier",
+                    "arguments": [
+                      {"name": "DataId", "type": "uint16", "direction": "in"},
+                      {"name": "Data", "type": "uint8[]", "direction": "out"},
+                      {"name": "Length", "type": "uint8", "direction": "out"}
+                    ]
+                  }
+                ]
+              }
+            ],
+            "runnables": [
+              {
+                "name": "EngineControl_10ms",
+                "event": "cyclic",
+                "period_ms": 10,
+                "priority": 5,
+                "data_mappings": ["VehicleSpeed", "EngineStatus"]
+              },
+              {
+                "name": "EngineMonitor_100ms",
+                "event": "cyclic",
+                "period_ms": 100,
+                "priority": 3,
+                "data_mappings": ["EngineStatus"]
+              },
+              {
+                "name": "DiagnosticHandler",
+                "event": "external",
+                "trigger": "Rte_Call_DiagnosticService",
+                "priority": 7
+              }
+            ],
+            "internal_behavior": {
+              "states": ["INIT", "IDLE", "RUNNING", "FAULT"],
+              "transitions": [
+                {"from": "INIT", "to": "IDLE", "condition": "initialization_complete"},
+                {"from": "IDLE", "to": "RUNNING", "condition": "engine_start_request"},
+                {"from": "RUNNING", "to": "IDLE", "condition": "engine_stop_request"},
+                {"from": "*", "to": "FAULT", "condition": "critical_fault_detected"}
+              ]
+            }
+          }
+        }
+      },
+      "output_file": "01-swc-scaffold-output.md"
+    },
+    {
+      "step": 2,
+      "tool": "autosar-arxml-validate",
+      "description": "Validate ARXML schema compliance and consistency",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+          "name": "autosar-arxml-validate",
+          "arguments": {
+            "arxml_files": [
+              "arxml/software-components/engine-control.arxml",
+              "arxml/software-components/diagnostics.arxml",
+              "arxml/interfaces/sender-receiver-interfaces.arxml",
+              "arxml/interfaces/client-server-interfaces.arxml",
+              "arxml/datatypes/application-datatypes.arxml"
+            ],
+            "schema_version": "R22-11",
+            "validation_rules": [
+              "schema_compliance",
+              "reference_integrity",
+              "naming_conventions",
+              "package_structure",
+              "datatype_consistency",
+              "interface_compatibility"
+            ],
+            "severity_levels": {
+              "error": ["schema_violation", "missing_reference", "circular_dependency"],
+              "warning": ["naming_convention", "unused_element", "deprecated_element"],
+              "info": ["documentation_missing", "version_mismatch"]
+            },
+            "autosar_version": "R22-11",
+            "platform": "Classic"
+          }
+        }
+      },
+      "output_file": "02-arxml-validation-report.md"
+    },
+    {
+      "step": 3,
+      "tool": "autosar-rte-check",
+      "description": "Verify RTE configuration consistency and generate overhead estimates",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+          "name": "autosar-rte-check",
+          "arguments": {
+            "system_description": "arxml/system-description.arxml",
+            "rte_config": "config/rte/rte-generation-config.yaml",
+            "checks": [
+              "port_connectivity",
+              "runnable_scheduling",
+              "timing_constraints",
+              "data_consistency",
+              "mode_consistency",
+              "resource_conflicts"
+            ],
+            "target_hardware": {
+              "mcu": "Infineon_TC397XP",
+              "frequency_mhz": 300,
+              "cores": 6,
+              "lockstep": true
+            },
+            "overhead_analysis": {
+              "enabled": true,
+              "sr_transfer_target_us": 2.0,
+              "cs_call_target_us": 10.0,
+              "context_switch_target_us": 5.0
+            },
+            "memory_budget": {
+              "rom_max_kb": 256,
+              "ram_max_kb": 64,
+              "nonvolatile_max_kb": 32
+            }
+          }
+        }
+      },
+      "output_file": "03-rte-consistency-report.md"
+    },
+    {
+      "step": 4,
+      "tool": "autosar-bsw-config",
+      "description": "Configure AUTOSAR BSW modules for ECU",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {
+          "name": "autosar-bsw-config",
+          "arguments": {
+            "ecu_name": "EngineControlECU",
+            "os_config": {
+              "os_name": "OsEngine",
+              "schedule_table_count": 4,
+              "task_count": 8,
+              "counter_count": 2,
+              "alarm_count": 6,
+              "app_mode_count": 3,
+              "app_modes": [
+                {"name": "DEFAULT", "type": "default"},
+                {"name": "STARTUP", "type": "restart"},
+                {"name": "ENGINE_RUNNING", "type": "normal"}
+              ],
+              "tasks": [
+                {
+                  "name": "EngineControlTask_10ms",
+                  "type": "basic",
+                  "priority": 5,
+                  "stack_size_bytes": 2048,
+                  "schedule_table": "SchT_EngineControl",
+                  "activation_point": 0,
+                  "autostart": true
+                },
+                {
+                  "name": "EngineMonitorTask_100ms",
+                  "type": "basic",
+                  "priority": 3,
+                  "stack_size_bytes": 1024,
+                  "schedule_table": "SchT_EngineMonitor",
+                  "activation_point": 0,
+                  "autostart": true
+                },
+                {
+                  "name": "DiagnosticTask",
+                  "type": "extended",
+                  "priority": 7,
+                  "stack_size_bytes": 4096,
+                  "event_trigger": "Rte_Event_DiagnosticRequest",
+                  "autostart": true
+                },
+                {
+                  "name": "BackgroundTask",
+                  "type": "basic",
+                  "priority": 1,
+                  "stack_size_bytes": 512,
+                  "autostart": true
+                }
+              ]
+            },
+            "bsw_modules": [
+              {
+                "module": "Can",
+                "config": {
+                  "controller_count": 2,
+                  "hardware_objects_tx": 32,
+                  "hardware_objects_rx": 64,
+                  "baudrate_kbps": [500, 250],
+                  "sample_point_percent": 75
+                }
+              },
+              {
+                "module": "CanIf",
+                "config": {
+                  "tx_pdu_count": 48,
+                  "rx_pdu_count": 96,
+                  "wakeup_support": true,
+                  "tx_confirm_polling": false
+                }
+              },
+              {
+                "module": "Com",
+                "config": {
+                  "ipdu_count": 64,
+                  "signal_count": 256,
+                  "group_count": 4,
+                  "nbp_support": true,
+                  "gateway_support": true
+                }
+              },
+              {
+                "module": "Dem",
+                "config": {
+                  "dtc_count": 512,
+                  "event_count": 1024,
+                  "freeze_frame_support": true,
+                  "extended_data_support": true,
+                  "obd_support": true
+                }
+              },
+              {
+                "module": "NvM",
+                "config": {
+                  "block_count": 128,
+                  "ram_block_size_total_kb": 64,
+                  "crc_support": true,
+                  "redundant_blocks": true
+                }
+              },
+              {
+                "module": "WdgM",
+                "config": {
+                  "supervision_cycle_count": 4,
+                  "controlled_counter_count": 8,
+                  "external_wdg_support": true
+                }
+              }
+            ],
+            "memory_layout": {
+              "flash_start": "0x80000000",
+              "flash_size_kb": 2048,
+              "ram_start": "0x70000000",
+              "ram_size_kb": 256,
+              "eeprom_start": "0x90000000",
+              "eeprom_size_kb": 64
+            }
+          }
+        }
+      },
+      "output_file": "04-bsw-config-output.md"
+    },
+    {
+      "step": 5,
+      "tool": "autosar-ecu-extract",
+      "description": "Extract ECU-specific configuration from system description",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "tools/call",
+        "params": {
+          "name": "autosar-ecu-extract",
+          "arguments": {
+            "system_description": "arxml/system-description.arxml",
+            "ecu_name": "EngineControlECU",
+            "extraction_options": {
+              "extract_swc": true,
+              "extract_rte": true,
+              "extract_bsw": true,
+              "extract_os": true,
+              "extract_memory_map": true,
+              "extract_pinout": true,
+              "extract_communication": true
+            },
+            "output_format": {
+              "arxml_extract": true,
+              "header_files": true,
+              "linker_script": true,
+              "documentation": true
+            },
+            "optimization": {
+              "inline_rte_functions": true,
+              "optimize_for_speed": true,
+              "dead_code_elimination": true,
+              "cross_call_optimization": true
+            },
+            "safety_requirements": {
+              "asil_level": "B",
+              "end_to_end_protection": true,
+              "program_flow_monitoring": true,
+              "stack_monitoring": true,
+              "watchdog_enabled": true
+            }
+          }
+        }
+      },
+      "output_file": "05-ecu-extract-report.md"
+    }
+  ],
+  "automation_script": {
+    "python": {
+      "description": "Execute all AUTOSAR MCP invocations sequentially",
+      "script": "autosar_automation.py",
+      "usage": "python autosar_automation.py --config mcp-invocations.json --output-dir ./"
+    },
+    "nodejs": {
+      "description": "Execute all AUTOSAR MCP invocations via Node.js script",
+      "script": "autosar-mcp-automation.js",
+      "usage": "node autosar-mcp-automation.js --config mcp-invocations.json --output-dir ./"
+    }
+  },
+  "traceability": {
+    "swc_to_rte": {
+      "EngCtrlSwComponentType": {
+        "runnables": ["EngineControl_10ms", "EngineMonitor_100ms", "DiagnosticHandler"],
+        "ports": ["RP_VehicleSpeed", "PP_EngineStatus", "RP_ThrottlePosition", "CS_DiagnosticService"],
+        "rte_apis": ["Rte_Read", "Rte_Write", "Rte_Call", "Rte_GetTimestampMs"]
+      }
+    },
+    "rte_to_os": {
+      "EngineControl_10ms": "EngineControlTask_10ms (Priority 5, 10ms cyclic)",
+      "EngineMonitor_100ms": "EngineMonitorTask_100ms (Priority 3, 100ms cyclic)",
+      "DiagnosticHandler": "DiagnosticTask (Priority 7, event-triggered)"
+    },
+    "os_to_bsw": {
+      "EngineControlTask_10ms": ["SchT_EngineControl schedule table", "OsEngine OS"],
+      "DiagnosticTask": ["WdgM supervision", "Dem event logging"]
+    },
+    "bsw_to_memory": {
+      "Can/CanIf/Com": "Flash: 128KB, RAM: 32KB",
+      "OsEngine": "Flash: 64KB, RAM: 16KB (stacks)",
+      "Dem/NvM": "Flash: 256KB (NVM emulation), EEPROM: 64KB"
+    }
+  },
+  "workflow_stages": {
+    "stage_1_swc_scaffold": {
+      "duration_minutes": "5-10",
+      "inputs": ["SWC requirements", "Port definitions", "Runnable specifications"],
+      "outputs": ["SWC ARXML skeleton", "Header file templates", "Source file templates"],
+      "validation": "ARXML schema compliance, naming conventions"
+    },
+    "stage_2_arxml_validation": {
+      "duration_minutes": "3-5",
+      "inputs": ["All ARXML files"],
+      "outputs": ["Validation report", "Error/warning list", "Fix recommendations"],
+      "validation": "Zero errors, warnings reviewed"
+    },
+    "stage_3_rte_configuration": {
+      "duration_minutes": "10-15",
+      "inputs": ["Validated ARXML", "RTE config YAML", "HW spec"],
+      "outputs": ["RTE configuration", "Overhead estimates", "Memory estimates"],
+      "validation": "Connectivity verified, timing within budget"
+    },
+    "stage_4_bsw_configuration": {
+      "duration_minutes": "15-20",
+      "inputs": ["ECU spec", "OS config", "BSW module requirements"],
+      "outputs": ["BSW configuration ARXML", "Memory layout", "OS objects"],
+      "validation": "Module compatibility, resource allocation"
+    },
+    "stage_5_ecu_extract": {
+      "duration_minutes": "10-15",
+      "inputs": ["Complete system description", "ECU assignment"],
+      "outputs": ["ECU extract ARXML", "Generated RTE", "Linker script"],
+      "validation": "ECU completeness, build readiness"
+    }
+  },
+  "metadata": {
+    "project": "AUTOSAR SWC Development Example",
+    "component": "Engine Control Unit - Software Component",
+    "asil_level": "B",
+    "autosar_version": "R22-11 (4.4.0)",
+    "platform": "Classic",
+    "target_hardware": "Infineon TC397XP TriCore",
+    "standards": [
+      "AUTOSAR Classic Platform R22-11",
+      "ISO 26262-6:2018 (ASIL-B software)",
+      "MISRA C:2012 (coding guidelines)"
+    ],
+    "created": "2025-03-24",
+    "revision": "1.0",
+    "status": "Approved"
+  }
+}

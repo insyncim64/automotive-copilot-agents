@@ -1,0 +1,673 @@
+name: Diagnostics UDS OBD Validation
+version: 1.0.0
+description: "Comprehensive validation workflow for automotive diagnostic systems including UDS services, OBD-II compliance, DTC management, and ECU flashing"
+
+on:
+  push:
+    branches: [develop, release/*]
+    paths:
+      - 'src/diagnostics/**'
+      - 'tests/diagnostics/**'
+      - 'config/diagnostics/**/*.yaml'
+      - 'odx/**/*.odx'
+      - 'pdx/**/*.pdx'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'src/diagnostics/**'
+      - 'tests/diagnostics/**'
+      - 'config/diagnostics/**/*.yaml'
+  schedule:
+    # Weekly diagnostics compliance review
+    - cron: '0 0 * * 3'
+
+env:
+  SAFETY_LEVEL: ASIL-B
+  PYTHON_VERSION: '3.10'
+  UDS_STACK_VERSION: '2.3.1'
+  ODX_TOOLS_VERSION: '1.5.0'
+
+jobs:
+  uds-service-validation:
+    name: UDS Service Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install UDS stack dependencies
+        run: |
+          pip install -r requirements-uds.txt
+          pip install -r requirements-testing.txt
+
+      - name: Validate diagnostic session control (0x10)
+        run: |
+          python tests/diagnostics/test_session_control.py \
+            --services default-programming-extended \
+            --security-level 01 \
+            --output results/session-control.json
+
+      - name: Validate security access (0x27)
+        run: |
+          python tests/diagnostics/test_security_access.py \
+            --levels 1-6 \
+            --seed-key-algorithm config/diagnostics/seed_key_algo.yaml \
+            --max-attempts 3 \
+            --lockout-time-s 10 \
+            --output results/security-access.json
+
+      - name: Validate read data by identifier (0x22)
+        run: |
+          python tests/diagnostics/test_read_did.py \
+            --did-range 0xF190-0xF1FF \
+            --timeout-ms 50 \
+            --output results/read-did.json
+
+      - name: Validate write data by identifier (0x2E)
+        run: |
+          python tests/diagnostics/test_write_did.py \
+            --did-list 0xF190,0xF191,0xF192 \
+            --security-required true \
+            --output results/write-did.json
+
+      - name: Validate routine control (0x31)
+        run: |
+          python tests/diagnostics/test_routine_control.py \
+            --routines 0xFF00-0xFF20 \
+            --option invoke-result-stop \
+            --timeout-ms 5000 \
+            --output results/routine-control.json
+
+      - name: Validate communication control (0x28)
+        run: |
+          python tests/diagnostics/test_comm_control.py \
+            --sub-functions enable-rx-enable-tx \
+            --output results/comm-control.json
+
+      - name: Validate tester present (0x3E)
+        run: |
+          python tests/diagnostics/test_tester_present.py \
+            --suppress-pos-res false \
+            --session-timeout-s 2 \
+            --output results/tester-present.json
+
+      - name: Validate ECU reset (0x11)
+        run: |
+          python tests/diagnostics/test_ecu_reset.py \
+            --sub-functions hard-reset-key-on-reset \
+            --verify-recovery true \
+            --output results/ecu-reset.json
+
+      - name: Upload UDS service results
+        uses: actions/upload-artifact@v4
+        with:
+          name: uds-service-results
+          path: |
+            results/session-*.json
+            results/security-*.json
+            results/read-*.json
+            results/write-*.json
+            results/routine-*.json
+            results/comm-*.json
+            results/tester-*.json
+            results/ecu-reset.json
+
+  obd-compliance-testing:
+    name: OBD-II Compliance Testing
+    runs-on: ubuntu-latest
+    needs: uds-service-validation
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install OBD testing dependencies
+        run: |
+          pip install -r requirements-obd.txt
+          pip install python-obd
+
+      - name: Download UDS results
+        uses: actions/download-artifact@v4
+        with:
+          name: uds-service-results
+          path: results/
+
+      - name: Validate Mode $01 services (Show current data)
+        run: |
+          python tests/diagnostics/obd/test_mode_01.py \
+            --pids 00-20 \
+            --simulated-vehicle test_vehicle_profile.yaml \
+            --output results/obd-mode01.json
+
+      - name: Validate Mode $02 services (Show freeze frame)
+        run: |
+          python tests/diagnostics/obd/test_mode_02.py \
+            --freeze-frame-count 3 \
+            --output results/obd-mode02.json
+
+      - name: Validate Mode $03 services (Show stored DTCs)
+        run: |
+          python tests/diagnostics/obd/test_mode_03.py \
+            --dtc-format SAE-J2012 \
+            --output results/obd-mode03.json
+
+      - name: Validate Mode $04 services (Clear DTCs)
+        run: |
+          python tests/diagnostics/obd/test_mode_04.py \
+            --verify-clear true \
+            --output results/obd-mode04.json
+
+      - name: Validate Mode $06 services (On-board monitoring)
+        run: |
+          python tests/diagnostics/obd/test_mode_06.py \
+            --monitors 01-40 \
+            --output results/obd-mode06.json
+
+      - name: Validate Mode $07 services (Pending DTCs)
+        run: |
+          python tests/diagnostics/obd/test_mode_07.py \
+            --output results/obd-mode07.json
+
+      - name: Validate Mode $09 services (Vehicle info request)
+        run: |
+          python tests/diagnostics/obd/test_mode_09.py \
+            --pids 00-0A \
+            --output results/obd-mode09.json
+
+      - name: Validate Mode $1A services (VIN request)
+        run: |
+          python tests/diagnostics/obd/test_mode_1a.py \
+            --output results/obd-mode1a.json
+
+      - name: Generate OBD compliance report
+        run: |
+          python tools/generate_obd_compliance_report.py \
+            --inputs results/obd-*.json \
+            --standard SAE-J1979 \
+            --output results/obd-compliance-report.md
+
+      - name: Upload OBD compliance results
+        uses: actions/upload-artifact@v4
+        with:
+          name: obd-compliance-results
+          path: |
+            results/obd-*.json
+            results/obd-compliance-report.md
+
+  dtc-management-validation:
+    name: DTC Management Validation
+    runs-on: ubuntu-latest
+    needs: uds-service-validation
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install DTC tools
+        run: |
+          pip install -r requirements-diagnostics.txt
+
+      - name: Download UDS results
+        uses: actions/download-artifact@v4
+        with:
+          name: uds-service-results
+          path: results/
+
+      - name: Validate DTC format and structure
+        run: |
+          python tests/diagnostics/dtc/test_dtc_structure.py \
+            --dtc-database config/diagnostics/dtc_database.yaml \
+            --standard ISO-14229-1 \
+            --output results/dtc-structure.json
+
+      - name: Validate DTC status byte
+        run: |
+          python tests/diagnostics/dtc/test_dtc_status.py \
+            --status-bits testFailed-testFailedThisOperation-pendingDtc-confirmedDtc \
+            --output results/dtc-status.json
+
+      - name: Validate DTC fault detection counter
+        run: |
+          python tests/diagnostics/dtc/test_fault_counter.py \
+            --increment-threshold 100 \
+            --decrement-threshold 100 \
+            --output results/dtc-fault-counter.json
+
+      - name: Validate DTC aging and clearing
+        run: |
+          python tests/diagnostics/dtc/test_dtc_aging.py \
+            --warmup-cycles 40 \
+            --aging-cycle-count 80 \
+            --output results/dtc-aging.json
+
+      - name: Validate snapshot record storage
+        run: |
+          python tests/diagnostics/dtc/test_snapshot_record.py \
+            --freeze-frame-count 3 \
+            --extended-data-records 5 \
+            --output results/dtc-snapshot.json
+
+      - name: Validate DTC severity classification
+        run: |
+          python tests/diagnostics/dtc/test_dtc_severity.py \
+            --severity-levels safety-emissions-functional \
+            --output results/dtc-severity.json
+
+      - name: Validate DTC maturity cycle
+        run: |
+          python tests/diagnostics/dtc/test_dtc_maturity.py \
+            --pending-confirmed-permanent-states \
+            --output results/dtc-maturity.json
+
+      - name: Generate DTC coverage report
+        run: |
+          python tools/generate_dtc_coverage_report.py \
+            --dtc-database config/diagnostics/dtc_database.yaml \
+            --test-results results/dtc-*.json \
+            --output results/dtc-coverage-report.md
+
+      - name: Upload DTC validation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: dtc-validation-results
+          path: |
+            results/dtc-*.json
+            results/dtc-coverage-report.md
+
+  odx-pdx-validation:
+    name: ODX/PDX File Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install ODX tools
+        run: |
+          pip install -r requirements-odx.txt
+
+      - name: Validate ODX file schema
+        run: |
+          python tests/diagnostics/odx/validate_schema.py \
+            --odx-files odx/*.odx \
+            --schema-version ODX-2.3 \
+            --output results/odx-schema-validation.json
+
+      - name: Validate PDX container structure
+        run: |
+          python tests/diagnostics/pdx/validate_pdx.py \
+            --pdx-files pdx/*.pdx \
+            --output results/pdx-validation.json
+
+      - name: Extract and validate data dictionaries
+        run: |
+          python tools/extract_data_dict.py \
+            --odx-files odx/*.odx \
+            --output results/data-dictionary-extract.json
+
+      - name: Validate parameter structure
+        run: |
+          python tests/diagnostics/odx/validate_parameters.py \
+            --odx-files odx/*.odx \
+            --param-types coded-value-table-struct \
+            --output results/parameter-validation.json
+
+      - name: Validate service references
+        run: |
+          python tests/diagnostics/odx/validate_services.py \
+            --odx-files odx/*.odx \
+            --output results/service-references.json
+
+      - name: Validate communication parameters
+        run: |
+          python tests/diagnostics/odx/validate_com_params.py \
+            --odx-files odx/*.odx \
+            --protocol CAN \
+            --output results/com-params-validation.json
+
+      - name: Generate ODX consistency report
+        run: |
+          python tools/generate_odx_consistency_report.py \
+            --odx-files odx/*.odx \
+            --pdx-files pdx/*.pdx \
+            --output results/odx-consistency-report.md
+
+      - name: Upload ODX/PDX validation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: odx-pdx-results
+          path: |
+            results/odx-*.json
+            results/pdx-*.json
+            results/data-dictionary-*.json
+            results/parameter-*.json
+            results/service-*.json
+            results/com-params-*.json
+            results/odx-consistency-report.md
+
+  ecu-flashing-validation:
+    name: ECU Flashing Validation
+    runs-on: self-hosted
+    needs: [uds-service-validation, odx-pdx-validation]
+    environment: diagnostics-flash-bench
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install flashing tools
+        run: |
+          pip install -r requirements-flashing.txt
+
+      - name: Download ODX results
+        uses: actions/download-artifact@v4
+        with:
+          name: odx-pdx-results
+          path: results/odx/
+
+      - name: Validate UDS bootloader protocol (0xA0)
+        run: |
+          python tests/diagnostics/flashing/test_bootloader.py \
+            --target ${{ vars.FLASH_ECU_TARGET }} \
+            --protocol UDS \
+            --output results/bootloader-validation.json
+
+      - name: Validate download request (0x34)
+        run: |
+          python tests/diagnostics/flashing/test_download_request.py \
+            --target ${{ vars.FLASH_ECU_TARGET }} \
+            --memory-address 0x08000000 \
+            --data-size 0x40000 \
+            --output results/download-request.json
+
+      - name: Validate transfer data (0x36)
+        run: |
+          python tests/diagnostics/flashing/test_transfer_data.py \
+            --target ${{ vars.FLASH_ECU_TARGET }} \
+            --block-size 0xF8 \
+            --verify-checksums true \
+            --output results/transfer-data.json
+
+      - name: Validate exit download session (0x37)
+        run: |
+          python tests/diagnostics/flashing/test_exit_download.py \
+            --target ${{ vars.FLASH_ECU_TARGET }} \
+            --output results/exit-download.json
+
+      - name: Validate routine control - erase memory (0xFF01)
+        run: |
+          python tests/diagnostics/flashing/test_erase_memory.py \
+            --target ${{ vars.FLASH_ECU_TARGET }} \
+            --memory-address 0x08000000 \
+            --erase-size 0x40000 \
+            --output results/erase-memory.json
+
+      - name: Validate routine control - checksum verification (0xFF02)
+        run: |
+          python tests/diagnostics/flashing/test_checksum_verify.py \
+            --target ${{ vars.FLASH_ECU_TARGET }} \
+            --algorithm crc32 \
+            --output results/checksum-verify.json
+
+      - name: Validate programming session timing
+        run: |
+          python tests/diagnostics/flashing/test_programming_timing.py \
+            --target ${{ vars.FLASH_ECU_TARGET }} \
+            --s3-server-timing-ms 5000 \
+            --output results/programming-timing.json
+
+      - name: Validate rollback mechanism
+        run: |
+          python tests/diagnostics/flashing/test_rollback.py \
+            --target ${{ vars.FLASH_ECU_TARGET }} \
+            --backup-partition B \
+            --output results/rollback-validation.json
+
+      - name: Upload flashing validation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecu-flashing-results
+          path: |
+            results/flashing-*.json
+
+  hil-diagnostics-testing:
+    name: HIL Diagnostics Integration Testing
+    runs-on: self-hosted
+    needs: [dtc-management-validation, ecu-flashing-validation]
+    environment: diagnostics-hil-bench
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install HIL testing dependencies
+        run: |
+          pip install -r requirements-hil.txt
+          pip install robotframework robotframework-canlibrary
+
+      - name: Download all previous results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-results'
+          path: all-results/
+
+      - name: Flash ECU with test firmware
+        run: |
+          python tools/flash_ecu.py \
+            --target ${{ vars.DIAG_ECU_TARGET }} \
+            --firmware build/test_diagnostics_firmware.bin \
+            --verify
+
+      - name: Run UDS diagnostic scan
+        run: |
+          robot --outputdir results/hil/ \
+            --variable ECU:${{ vars.DIAG_ECU_TARGET }} \
+            --include diagnostic-scan \
+            tests/diagnostics/hil/
+
+      - name: Run DTC injection and verification test
+        run: |
+          robot --outputdir results/hil/ \
+            --variable ECU:${{ vars.DIAG_ECU_TARGET }} \
+            --include dtc-injection \
+            tests/diagnostics/hil/
+
+      - name: Run security access brute force protection test
+        run: |
+          robot --outputdir results/hil/ \
+            --variable ECU:${{ vars.DIAG_ECU_TARGET }} \
+            --include security-protection \
+            tests/diagnostics/hil/
+
+      - name: Run session management state machine test
+        run: |
+          robot --outputdir results/hil/ \
+            --variable ECU:${{ vars.DIAG_ECU_TARGET }} \
+            --include session-management \
+            tests/diagnostics/hil/
+
+      - name: Run communication stress test
+        run: |
+          robot --outputdir results/hil/ \
+            --variable ECU:${{ vars.DIAG_ECU_TARGET }} \
+            --include comm-stress \
+            --variable CONCURRENT_CLIENTS:5 \
+            tests/diagnostics/hil/
+
+      - name: Run diagnostic over CAN FD test
+        run: |
+          robot --outputdir results/hil/ \
+            --variable ECU:${{ vars.DIAG_ECU_TARGET }} \
+            --variable PROTOCOL:CANFD \
+            --include diagnostic-session \
+            tests/diagnostics/hil/
+
+      - name: Run diagnostic over DoIP test
+        run: |
+          robot --outputdir results/hil/ \
+            --variable ECU:${{ vars.DIAG_ECU_TARGET }} \
+            --variable PROTOCOL:DoIP \
+            --variable DOIP_PORT:13400 \
+            --include diagnostic-session \
+            tests/diagnostics/hil/
+
+      - name: Generate HIL test summary
+        run: |
+          python tools/summarize_hil_results.py \
+            --input results/hil/ \
+            --output results/hil-diagnostics-summary.md
+
+      - name: Upload HIL diagnostics results
+        uses: actions/upload-artifact@v4
+        with:
+          name: hil-diagnostic-results
+          path: |
+            results/hil/
+            results/hil-diagnostics-summary.md
+
+  safety-compliance-validation:
+    name: Safety Compliance Validation
+    runs-on: ubuntu-latest
+    needs: hil-diagnostics-testing
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install compliance tools
+        run: |
+          pip install -r requirements-safety.txt
+
+      - name: Download all results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-results'
+          path: all-results/
+
+      - name: Validate ISO 14229 compliance
+        run: |
+          python tools/validate_iso14229_compliance.py \
+            --uds-results all-results/uds-service-results/ \
+            --output results/iso14229-compliance.md
+
+      - name: Validate ISO 15765 compliance (CAN transport)
+        run: |
+          python tools/validate_iso15765_compliance.py \
+            --transport-results all-results/hil-diagnostic-results/ \
+            --output results/iso15765-compliance.md
+
+      - name: Validate SAE J1979 OBD compliance
+        run: |
+          python tools/validate_saej1979_compliance.py \
+            --obd-results all-results/obd-compliance-results/ \
+            --output results/saej1979-compliance.md
+
+      - name: Validate diagnostic coverage for ASIL-B
+        run: |
+          python tools/calculate_diagnostic_coverage.py \
+            --dtc-results all-results/dtc-validation-results/ \
+            --target-coverage 0.90 \
+            --asil-level B \
+            --output results/diagnostic-coverage-report.md
+
+      - name: Generate compliance summary
+        run: |
+          python tools/compile_diagnostics_compliance.py \
+            --inputs results/*.md \
+            --output results/diagnostics-compliance-summary.md
+
+      - name: Upload compliance results
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-compliance-results
+          path: |
+            results/*-compliance.md
+            results/diagnostics-compliance-summary.md
+
+  release-approval:
+    name: Release Approval
+    runs-on: ubuntu-latest
+    needs: [safety-compliance-validation]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-results'
+          path: all-results/
+
+      - name: Compile diagnostics validation summary
+        run: |
+          python tools/compile_diagnostics_validation_report.py \
+            --inputs all-results/ \
+            --template templates/diagnostics-validation-report.md \
+            --output diagnostics-validation-summary.md
+
+      - name: Check open diagnostic issues
+        run: |
+          gh issue list \
+            --label "diagnostics" \
+            --label "uds" \
+            --state open \
+            > open-diagnostic-issues.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check OBD compliance status
+        run: |
+          python tools/check_obd_compliance_status.py \
+            --report all-results/obd-compliance-results/obd-compliance-report.md \
+            --output obd-compliance-status.md
+
+      - name: Generate release recommendation
+        run: |
+          python tools/generate_diagnostics_release_recommendation.py \
+            --summary diagnostics-validation-summary.md \
+            --compliance all-results/diagnostics-compliance-results/diagnostics-compliance-summary.md \
+            --issues open-diagnostic-issues.md \
+            --asil-level ${{ env.SAFETY_LEVEL }} \
+            --output release-recommendation.md
+
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-release-package
+          path: |
+            diagnostics-validation-summary.md
+            release-recommendation.md
+            open-diagnostic-issues.md
+            obd-compliance-status.md
+            all-results/dtc-validation-results/dtc-coverage-report.md
+            all-results/obd-compliance-results/obd-compliance-report.md

@@ -1,0 +1,482 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ADAS Perception Pipeline MCP Tool Invocations",
+  "description": "Complete JSON-RPC 2.0 invocations for all MCP tools used in ADAS perception pipeline workflow",
+  "version": "1.0.0",
+  "invocations": [
+    {
+      "step": 1,
+      "tool": "adas-odd-define",
+      "description": "Define Operational Design Domain for Highway Pilot ADAS",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+          "name": "adas-odd-define",
+          "arguments": {
+            "name": "Highway_Pilot_ODD",
+            "version": "1.0",
+            "road_types": [
+              {
+                "type": "highway",
+                "constraints": {
+                  "min_lanes": 2,
+                  "max_lanes": 4,
+                  "median": "required"
+                }
+              },
+              {
+                "type": "expressway",
+                "constraints": {
+                  "min_lanes": 2,
+                  "access": "controlled"
+                }
+              }
+            ],
+            "speed_range": {
+              "min_kmh": 0,
+              "max_kmh": 130
+            },
+            "weather_conditions": [
+              {
+                "condition": "clear",
+                "constraints": {
+                  "visibility_km": ">10"
+                }
+              },
+              {
+                "condition": "rain_light",
+                "constraints": {
+                  "precipitation_mm_h": "<5"
+                }
+              },
+              {
+                "condition": "rain_moderate",
+                "constraints": {
+                  "precipitation_mm_h": "5-15"
+                }
+              },
+              {
+                "condition": "fog_light",
+                "constraints": {
+                  "visibility_km": "1-5"
+                }
+              }
+            ],
+            "lighting_conditions": [
+              "daylight",
+              "dusk",
+              "dawn",
+              "artificial_lighting"
+            ],
+            "geographic_constraints": {
+              "lane_markings": ["solid", "dashed", "double"],
+              "curvature_max_deg": 15,
+              "gradient_max_percent": 8
+            },
+            "exclusions": [
+              "construction_zones",
+              "unpaved_roads",
+              "toll_stations",
+              "tunnels_without_lighting"
+            ],
+            "traffic_participants": [
+              "passenger_vehicles",
+              "commercial_trucks",
+              "motorcycles",
+              "pedestrians_excluded"
+            ]
+          }
+        }
+      },
+      "output_file": "01-odd-definition.md"
+    },
+    {
+      "step": 2,
+      "tool": "adas-camera-calibrate",
+      "description": "Perform camera intrinsic and extrinsic calibration",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+          "name": "adas-camera-calibrate",
+          "arguments": {
+            "camera_id": "CAM_FRONT_001",
+            "calibration_method": "checkerboard",
+            "image_count": 25,
+            "checkerboard_squares": {
+              "rows": 9,
+              "cols": 6,
+              "square_size_mm": 25.0
+            },
+            "optimization_flags": [
+              "fix_principal_point",
+              "zero_tangent_dist"
+            ],
+            "image_resolution": {
+              "width": 1920,
+              "height": 1080
+            }
+          }
+        }
+      },
+      "output_file": "02-sensor-calibration-report.md"
+    },
+    {
+      "step": 3,
+      "tool": "adas-lidar-calibrate",
+      "description": "Perform LiDAR extrinsic calibration to vehicle frame",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+          "name": "adas-lidar-calibrate",
+          "arguments": {
+            "lidar_id": "LIDAR_FRONT_001",
+            "calibration_method": "target_based",
+            "target_type": "reflective_sphere",
+            "target_count": 8,
+            "pointcloud_resolution": "high",
+            "vehicle_frame": {
+              "origin": "rear_axle_center",
+              "x_forward": true,
+              "y_left": true,
+              "z_up": true
+            },
+            "initial_guess": {
+              "rotation_deg": [0.0, -2.5, 0.5],
+              "translation_m": [1.4, 0.0, 2.2]
+            }
+          }
+        }
+      },
+      "output_file": "02-sensor-calibration-report.md"
+    },
+    {
+      "step": 4,
+      "tool": "adas-sensor-fusion",
+      "description": "Configure sensor fusion architecture and parameters",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {
+          "name": "adas-sensor-fusion",
+          "arguments": {
+            "fusion_id": "FUSION_HIGHWAY_001",
+            "architecture": "late_fusion",
+            "sensors": [
+              {
+                "sensor_id": "CAM_FRONT_001",
+                "type": "camera",
+                "frame_rate_hz": 30,
+                "fov_deg": [120.0, 50.0]
+              },
+              {
+                "sensor_id": "LIDAR_FRONT_001",
+                "type": "lidar",
+                "frame_rate_hz": 10,
+                "range_m": 150,
+                "channels": 128
+              }
+            ],
+            "association": {
+              "algorithm": "hungarian",
+              "cost_function": {
+                "iou_weight": 0.6,
+                "velocity_weight": 0.3,
+                "class_weight": 0.1
+              },
+              "gating": {
+                "iou_threshold": 0.2,
+                "velocity_threshold_ms": 15.0
+              }
+            },
+            "tracking": {
+              "filter_type": "imm_kalman",
+              "motion_models": [
+                "constant_velocity",
+                "constant_acceleration",
+                "maneuvering"
+              ],
+              "update_rate_hz": 30,
+              "process_noise_adaptive": true
+            },
+            "confidence_weighting": {
+              "camera_base": 0.7,
+              "lidar_base": 0.8,
+              "weather_adjustment": true
+            }
+          }
+        }
+      },
+      "output_file": "03-sensor-fusion-config.md"
+    },
+    {
+      "step": 5,
+      "tool": "adas-perception-pipeline",
+      "description": "Execute perception pipeline on dataset",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "tools/call",
+        "params": {
+          "name": "adas-perception-pipeline",
+          "arguments": {
+            "pipeline_id": "PERCEPTION_HW_001",
+            "dataset": {
+              "path": "/data/highway_pilot_dataset",
+              "format": "rosbag",
+              "topics": {
+                "camera": "/camera/front/image_raw",
+                "lidar": "/lidar/front/pointcloud",
+                "ground_truth": "/ground_truth/objects"
+              }
+            },
+            "algorithms": {
+              "camera_detection": {
+                "model": "yolov5x",
+                "input_size": [640, 640],
+                "confidence_threshold": 0.5,
+                "nms_threshold": 0.45
+              },
+              "lidar_detection": {
+                "model": "pointpillars",
+                "voxel_size": [0.16, 0.16, 4.0],
+                "pillar_size": [0.16, 0.16]
+              },
+              "tracking": {
+                "max_age_frames": 30,
+                "min_hits": 3,
+                "iou_threshold": 0.3
+              }
+            },
+            "output_classes": [
+              "vehicle",
+              "pedestrian",
+              "cyclist",
+              "traffic_sign",
+              "traffic_light"
+            ],
+            "runtime_config": {
+              "gpu_id": 0,
+              "batch_size": 1,
+              "num_workers": 4
+            }
+          }
+        }
+      },
+      "output_file": "04-perception-pipeline-output.md"
+    },
+    {
+      "step": 6,
+      "tool": "adas-perception-eval",
+      "description": "Evaluate perception performance against ground truth",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 6,
+        "method": "tools/call",
+        "params": {
+          "name": "adas-perception-eval",
+          "arguments": {
+            "evaluation_id": "EVAL_HW_001",
+            "prediction_file": "04-perception-pipeline-output.md",
+            "ground_truth_path": "/data/highway_pilot_dataset/annotations",
+            "metrics": {
+              "detection": {
+                "iou_threshold": 0.5,
+                "class_averaging": "macro"
+              },
+              "tracking": {
+                "track_iou_threshold": 0.5,
+                "min_track_length": 3
+              }
+            },
+            "stratification": {
+              "by_distance": {
+                "enabled": true,
+                "bins_m": [0, 20, 40, 60, 80, 100]
+              },
+              "by_weather": {
+                "enabled": true,
+                "conditions": ["clear", "rain_light", "rain_moderate"]
+              },
+              "by_lighting": {
+                "enabled": true,
+                "conditions": ["daylight", "dusk", "night"]
+              }
+            },
+            "latency_analysis": {
+              "enabled": true,
+              "percentiles": [50, 90, 95, 99]
+            }
+          }
+        }
+      },
+      "output_file": "05-perception-evaluation-report.md"
+    },
+    {
+      "step": 7,
+      "tool": "adas-scenario-replay",
+      "description": "Replay critical scenarios for validation",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "tools/call",
+        "params": {
+          "name": "adas-scenario-replay",
+          "arguments": {
+            "scenario_catalog": "/data/critical_scenarios/highway_pilot.yaml",
+            "scenarios": [
+              {
+                "id": "CS-001",
+                "name": "Vehicle cut-in at high speed",
+                "ego_speed_kmh": 100,
+                "intruder_speed_kmh": 95,
+                "ttc_initial_s": 5.0,
+                "weather": "rain_light"
+              },
+              {
+                "id": "CS-002",
+                "name": "Pedestrian crossing at dusk",
+                "ego_speed_kmh": 60,
+                "pedestrian_speed_ms": 1.4,
+                "lighting": "dusk",
+                "occlusion": "partial"
+              },
+              {
+                "id": "CS-003",
+                "name": "Cyclist in blind spot",
+                "ego_speed_kmh": 80,
+                "cyclist_speed_kmh": 25,
+                "lateral_offset_m": 3.5,
+                "duration_s": 10
+              }
+            ],
+            "replay_config": {
+              "real_time_factor": 1.0,
+              "record_outputs": true,
+              "inject_faults": false
+            },
+            "pass_criteria": {
+              "detection_latency_ms": 100,
+              "min_precision": 0.85,
+              "min_recall": 0.80
+            }
+          }
+        }
+      },
+      "output_file": "06-scenario-validation-report.md"
+    },
+    {
+      "step": 8,
+      "tool": "adas-fusion-validate",
+      "description": "Validate fusion algorithm independence and robustness",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 8,
+        "method": "tools/call",
+        "params": {
+          "name": "adas-fusion-validate",
+          "arguments": {
+            "validation_id": "FUSVAL_001",
+            "fusion_config": "03-sensor-fusion-config.md",
+            "independence_analysis": {
+              "sensor_paths": [
+                "camera_processing",
+                "lidar_processing"
+              ],
+              "aspects": [
+                "sensor_hardware",
+                "signal_conditioning",
+                "algorithm_implementation",
+                "software_team",
+                "testing_campaign"
+              ]
+            },
+            "robustness_tests": {
+              "sensor_degradation": [
+                {
+                  "sensor": "camera",
+                  "degradation": "motion_blur",
+                  "severity": "moderate"
+                },
+                {
+                  "sensor": "lidar",
+                  "degradation": "rain_noise",
+                  "severity": "light"
+                }
+              ],
+              "single_sensor_failure": [
+                "camera_dropout",
+                "lidar_dropout"
+              ]
+            },
+            "ccf_analysis": {
+              "beta_factor": 0.05,
+              "categories": [
+                "hardware_common_cause",
+                "environmental_common_cause",
+                "systematic_common_cause"
+              ]
+            }
+          }
+        }
+      },
+      "output_file": "06-scenario-validation-report.md"
+    }
+  ],
+  "automation_script": {
+    "python": {
+      "description": "Execute all MCP invocations sequentially",
+      "script": "mcp_automation.py",
+      "usage": "python ../../tools/mcp_automation.py --config mcp-invocations.json --output-dir ./ --dataset /path/to/dataset/"
+    },
+    "nodejs": {
+      "description": "Execute all MCP invocations via Node.js script",
+      "script": "mcp-automation.js",
+      "usage": "node ../../tools/mcp-automation.js --config mcp-invocations.json --output-dir ./ --dataset /path/to/dataset/"
+    }
+  },
+  "traceability": {
+    "odd_to_calibration": {
+      "road_types": ["highway", "expressway"],
+      "sensor_requirements": ["camera", "lidar"],
+      "calibration_validated_for": ["clear", "rain_light", "rain_moderate", "fog_light"]
+    },
+    "calibration_to_fusion": {
+      "CAM_FRONT_001": "fused_via_late_fusion",
+      "LIDAR_FRONT_001": "fused_via_late_fusion",
+      "time_sync_offset_ms": 5.0
+    },
+    "fusion_to_perception": {
+      "hungarian_association": "enables_multi_object_tracking",
+      "imm_kalman_filter": "provides_trajectory_estimation"
+    },
+    "perception_to_evaluation": {
+      "detection_output": "evaluated_via_precision_recall",
+      "tracking_output": "evaluated_via_mota_motp"
+    },
+    "evaluation_to_validation": {
+      "metric_thresholds": "validated_via_scenario_replay",
+      "edge_cases": "validated_via_fusion_analysis"
+    }
+  },
+  "metadata": {
+    "project": "ADAS Perception Pipeline Example",
+    "component": "Highway Pilot ADAS - Camera/LiDAR Fusion",
+    "asil_level": "B",
+    "standards": [
+      "ISO 26262-3:2018 (HARA)",
+      "ISO 21448:2022 (SOTIF)",
+      "ISO 34501:2021 (Scenario taxonomy)",
+      "ISO 34502:2021 (Scenario-based safety evaluation)"
+    ],
+    "created": "2025-03-24",
+    "revision": "1.0",
+    "status": "Draft"
+  }
+}

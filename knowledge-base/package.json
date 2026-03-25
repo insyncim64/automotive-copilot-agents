@@ -1,0 +1,31 @@
+{
+  "name": "automotive-knowledge-server",
+  "version": "1.0.0",
+  "description": "Automotive knowledge base MCP server providing access to ISO 26262, ISO 21434, AUTOSAR, and ASPICE documentation",
+  "main": "dist/knowledge-server.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "start": "node dist/knowledge-server.js",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "automotive",
+    "mcp",
+    "knowledge-base",
+    "iso26262",
+    "iso21434",
+    "autosar",
+    "aspice"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
