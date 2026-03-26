@@ -1,5 +1,5 @@
 # Automotive Copilot Agents - Windows Setup Script
-# Installs automotive copilot agents to .github/copilot/ directory
+# Installs automotive copilot configuration from this template repo into a target project's .github/ directory
 # Append-safe: never modifies existing content
 
 param(
@@ -16,10 +16,13 @@ $ErrorActionPreference = "Stop"
 # Configuration
 # ============================================================================
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
-$PROJECT_ROOT = if ($ProjectPath) { $ProjectPath } else { $SCRIPT_DIR }
-$COPILOT_PATH = Join-Path $PROJECT_ROOT ".github\copilot"
-$SOURCE_PATH = Join-Path $PROJECT_ROOT ".github\copilot"
-$MANIFEST_FILE = Join-Path $PROJECT_ROOT ".github\copilot\.install.manifest.json"
+$SOURCE_REPO_ROOT = [System.IO.Path]::GetFullPath((Join-Path $SCRIPT_DIR ".."))
+$TARGET_PROJECT_ROOT = if ($ProjectPath) { [System.IO.Path]::GetFullPath($ProjectPath) } else { (Get-Location).Path }
+$SOURCE_GITHUB_PATH = Join-Path $SOURCE_REPO_ROOT ".github"
+$SOURCE_COPILOT_PATH = Join-Path $SOURCE_GITHUB_PATH "copilot"
+$TARGET_GITHUB_PATH = Join-Path $TARGET_PROJECT_ROOT ".github"
+$COPILOT_PATH = Join-Path $TARGET_GITHUB_PATH "copilot"
+$MANIFEST_FILE = Join-Path $COPILOT_PATH ".install.manifest.json"
 $LOG_FILE = Join-Path $SCRIPT_DIR "setup.log"
 
 # Colors for output
@@ -154,13 +157,45 @@ function Copy-Safe {
     return $copiedCount
 }
 
+function Copy-FileSafe {
+    param(
+        [string]$SourceFile,
+        [string]$DestinationFile
+    )
+
+    if (!(Test-Path $SourceFile)) {
+        Write-Warning-Message "Source file not found: $SourceFile (skipping)"
+        return 0
+    }
+
+    $destDir = Split-Path $DestinationFile -Parent
+    if (!(Test-Path $destDir)) {
+        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+    }
+
+    if (!(Test-Path $DestinationFile)) {
+        Copy-Item -Path $SourceFile -Destination $DestinationFile -Force
+        return 1
+    }
+
+    $sourceSize = (Get-Item $SourceFile).Length
+    $targetSize = (Get-Item $DestinationFile).Length
+    if ($sourceSize -ne $targetSize) {
+        Copy-Item -Path $SourceFile -Destination $DestinationFile -Force
+        return 1
+    }
+
+    return 0
+}
+
 function Create-Manifest {
     param([string]$ManifestPath)
 
     $manifest = @{
         "version" = "1.0.0"
         "install_date" = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        "project_path" = $PROJECT_ROOT
+        "project_path" = $TARGET_PROJECT_ROOT
+        "source_repo_path" = $SOURCE_REPO_ROOT
         "copilot_path" = $COPILOT_PATH
         "installed_components" = @()
     }
@@ -168,14 +203,60 @@ function Create-Manifest {
     # Scan installed components
     $components = @()
 
-    if (Test-Path (Join-Path $COPILOT_PATH "instructions")) {
-        $agentFiles = Get-ChildItem -Path (Join-Path $COPILOT_PATH "instructions") -Filter "*.md" -File
+    $targetAgentsPath = Join-Path $TARGET_GITHUB_PATH "agents"
+    if (Test-Path $targetAgentsPath) {
+        $agentFiles = Get-ChildItem -Path $targetAgentsPath -Filter "*.agent.md" -File
         foreach ($file in $agentFiles) {
             $components += @{
                 "type" = "agent"
                 "name" = $file.BaseName
                 "path" = $file.FullName
             }
+        }
+    }
+
+    $targetInstructionsPath = Join-Path $TARGET_GITHUB_PATH "instructions"
+    if (Test-Path $targetInstructionsPath) {
+        $instructionFiles = Get-ChildItem -Path $targetInstructionsPath -Filter "*.instructions.md" -File
+        foreach ($file in $instructionFiles) {
+            $components += @{
+                "type" = "instruction"
+                "name" = $file.BaseName
+                "path" = $file.FullName
+            }
+        }
+    }
+
+    $targetPromptsPath = Join-Path $TARGET_GITHUB_PATH "prompts"
+    if (Test-Path $targetPromptsPath) {
+        $promptFiles = Get-ChildItem -Path $targetPromptsPath -Filter "*.prompt.md" -File
+        foreach ($file in $promptFiles) {
+            $components += @{
+                "type" = "prompt"
+                "name" = $file.BaseName
+                "path" = $file.FullName
+            }
+        }
+    }
+
+    $targetSkillsPath = Join-Path $TARGET_GITHUB_PATH "skills"
+    if (Test-Path $targetSkillsPath) {
+        $skillFiles = Get-ChildItem -Path $targetSkillsPath -Filter "SKILL.md" -Recurse -File
+        foreach ($file in $skillFiles) {
+            $components += @{
+                "type" = "skill"
+                "name" = Split-Path (Split-Path $file.FullName -Parent) -Leaf
+                "path" = $file.FullName
+            }
+        }
+    }
+
+    $workspaceInstructionPath = Join-Path $TARGET_GITHUB_PATH "copilot-instructions.md"
+    if (Test-Path $workspaceInstructionPath) {
+        $components += @{
+            "type" = "workspace-instruction"
+            "name" = "copilot-instructions"
+            "path" = $workspaceInstructionPath
         }
     }
 
@@ -224,7 +305,7 @@ function Invoke-Status {
     Write-Log "Checking installation status"
     Write-Host ""
 
-    if (!(Test-Path $COPILOT_PATH)) {
+    if (!(Test-Path $TARGET_GITHUB_PATH)) {
         Write-Warning-Message "Automotive Copilot Agents NOT installed"
         Write-Log "Status check complete: NOT installed" -Level "WARNING"
         Write-Host ""
@@ -233,20 +314,26 @@ function Invoke-Status {
     }
 
     # Count components
-    $agentCount = Get-FileCount (Join-Path $COPILOT_PATH "instructions") "*.md"
-    $skillCount = Get-FileCount (Join-Path $COPILOT_PATH "context") "*.md"
+    $agentCount = Get-FileCount (Join-Path $TARGET_GITHUB_PATH "agents") "*.agent.md"
+    $instructionCount = Get-FileCount (Join-Path $TARGET_GITHUB_PATH "instructions") "*.instructions.md"
+    $promptCount = Get-FileCount (Join-Path $TARGET_GITHUB_PATH "prompts") "*.prompt.md"
+    $skillCount = Get-FileCount (Join-Path $TARGET_GITHUB_PATH "skills") "SKILL.md"
+    $contextCount = Get-FileCount (Join-Path $COPILOT_PATH "context") "*.md"
     $knowledgeCount = Get-FileCount (Join-Path $COPILOT_PATH "knowledge") "*.md"
-    $totalSize = Get-DirectorySize $COPILOT_PATH
+    $totalSize = Get-DirectorySize $TARGET_GITHUB_PATH
 
     Write-Success "Automotive Copilot Agents INSTALLED"
     Write-Host ""
     Write-Host "Installation Summary:" -ForegroundColor $Color_Info
-    Write-Host "  Location: $COPILOT_PATH"
+    Write-Host "  Location: $TARGET_GITHUB_PATH"
     Write-Host ""
     Write-Host "Components:" -ForegroundColor $Color_Info
     Write-Host "  Agents:       $agentCount"
-    Write-Host "  Skills:       $skillCount (context files)"
-    Write-Host "  Knowledge:    $knowledgeCount (reference docs)"
+    Write-Host "  Instructions: $instructionCount"
+    Write-Host "  Prompts:      $promptCount"
+    Write-Host "  Skills:       $skillCount"
+    Write-Host "  Context:      $contextCount"
+    Write-Host "  Knowledge:    $knowledgeCount"
     Write-Host "  Total Size:   $(Format-FileSize $totalSize)"
     Write-Host ""
 
@@ -262,7 +349,7 @@ function Invoke-Status {
     # List agents
     if ($agentCount -gt 0) {
         Write-Host "Installed Agents:" -ForegroundColor $Color_Info
-        Get-ChildItem -Path (Join-Path $COPILOT_PATH "instructions") -Filter "*.md" -File |
+        Get-ChildItem -Path (Join-Path $TARGET_GITHUB_PATH "agents") -Filter "*.agent.md" -File |
             ForEach-Object { Write-Host "  - $($_.BaseName)" }
         Write-Host ""
     }
@@ -270,16 +357,16 @@ function Invoke-Status {
     # List skill categories
     if ($skillCount -gt 0) {
         Write-Host "Skill Categories:" -ForegroundColor $Color_Info
-        Get-ChildItem -Path (Join-Path $COPILOT_PATH "context") -Directory |
+        Get-ChildItem -Path (Join-Path $TARGET_GITHUB_PATH "skills") -Directory |
             ForEach-Object {
-                $count = Get-FileCount $_.FullName "*.md"
+                $count = Get-FileCount $_.FullName "SKILL.md"
                 Write-Host "  - $($_.Name): $count files"
             }
         Write-Host ""
     }
 
     # Check VS Code integration
-    $vscodeSettingsPath = Join-Path $PROJECT_ROOT ".vscode\settings.json"
+    $vscodeSettingsPath = Join-Path $TARGET_PROJECT_ROOT ".vscode\settings.json"
     if (Test-Path $vscodeSettingsPath) {
         $vscodeSettings = Get-Content $vscodeSettingsPath | ConvertFrom-Json
         Write-Host "VS Code Integration:" -ForegroundColor $Color_Info
@@ -296,7 +383,7 @@ function Invoke-Status {
     Write-Host ""
     Write-Host "To uninstall: .\setup.ps1 -Uninstall"
 
-    Write-Log "Status check complete: INSTALLED ($agentCount agents, $skillCount skills, $knowledgeCount knowledge)"
+    Write-Log "Status check complete: INSTALLED ($agentCount agents, $instructionCount instructions, $skillCount skills, $contextCount context, $knowledgeCount knowledge)"
 }
 
 # ============================================================================
@@ -308,9 +395,9 @@ function Invoke-Uninstall {
     Write-Log "Starting uninstallation"
     Write-Host ""
 
-    if (!(Test-Path $COPILOT_PATH)) {
-        Write-Warning-Message "Nothing to uninstall - .github\copilot does not exist"
-        Write-Log "Nothing to uninstall - .github\copilot does not exist" -Level "WARNING"
+    if (!(Test-Path $MANIFEST_FILE)) {
+        Write-Warning-Message "Nothing to uninstall - install manifest not found: $MANIFEST_FILE"
+        Write-Log "Nothing to uninstall - install manifest not found" -Level "WARNING"
         return
     }
 
@@ -322,16 +409,42 @@ function Invoke-Uninstall {
         return
     }
 
-    # Remove .github/copilot directory
-    Write-Info "Removing: $COPILOT_PATH"
-    Write-Log "Removing copilot directory: $COPILOT_PATH"
-    Remove-Item -Path $COPILOT_PATH -Recurse -Force
+    $manifest = Get-Content $MANIFEST_FILE | ConvertFrom-Json
+    $removedCount = 0
+    foreach ($component in $manifest.installed_components) {
+        if ($component.path -and (Test-Path $component.path)) {
+            Remove-Item -Path $component.path -Force -ErrorAction SilentlyContinue
+            if (!(Test-Path $component.path)) {
+                $removedCount++
+            }
+        }
+    }
+
+    if (Test-Path $MANIFEST_FILE) {
+        Remove-Item -Path $MANIFEST_FILE -Force -ErrorAction SilentlyContinue
+    }
+
+    # Remove now-empty directories for installed layout where possible.
+    $cleanupDirs = @(
+        (Join-Path $TARGET_GITHUB_PATH "agents"),
+        (Join-Path $TARGET_GITHUB_PATH "instructions"),
+        (Join-Path $TARGET_GITHUB_PATH "prompts"),
+        (Join-Path $TARGET_GITHUB_PATH "skills"),
+        (Join-Path $COPILOT_PATH "context"),
+        (Join-Path $COPILOT_PATH "knowledge"),
+        $COPILOT_PATH
+    )
+    foreach ($dir in $cleanupDirs) {
+        if ((Test-Path $dir) -and ((Get-ChildItem -Path $dir -Force -ErrorAction SilentlyContinue).Count -eq 0)) {
+            Remove-Item -Path $dir -Force -ErrorAction SilentlyContinue
+        }
+    }
 
     Write-Success "Automotive Copilot Agents uninstalled"
-    Write-Log "Uninstallation complete"
+    Write-Log "Uninstallation complete, removed components: $removedCount"
     Write-Host ""
-    Write-Info "Note: This only removes the .github/copilot directory"
-    Write-Info "Your .vscode/settings.json and other project files are unchanged"
+    Write-Info "Removed components tracked by install manifest"
+    Write-Info "Your .vscode/settings.json and unrelated project files are unchanged"
 }
 
 # ============================================================================
@@ -344,36 +457,43 @@ function Invoke-Install {
     Write-Host ""
 
     # Verify source directory
-    if (!(Test-Path $SOURCE_PATH)) {
-        Write-Error-Message "Source directory not found: $SOURCE_PATH"
-        Write-Error-Message "Make sure you're running this script from the project root"
-        Write-Log "Source directory not found: $SOURCE_PATH" -Level "ERROR"
+    if (!(Test-Path $SOURCE_GITHUB_PATH)) {
+        Write-Error-Message "Source directory not found: $SOURCE_GITHUB_PATH"
+        Write-Error-Message "Make sure you're running this script from the automotive-copilot-agents repository"
+        Write-Log "Source directory not found: $SOURCE_GITHUB_PATH" -Level "ERROR"
         exit 1
     }
-    Write-Log "Source validated: $SOURCE_PATH"
+    Write-Log "Source validated: $SOURCE_GITHUB_PATH"
 
     # Display what will be installed
-    $sourceAgents = Get-FileCount (Join-Path $SOURCE_PATH "instructions") "*.md"
-    $sourceSkills = Get-FileCount (Join-Path $SOURCE_PATH "context") "*.md"
-    $sourceKnowledge = Get-FileCount (Join-Path $SOURCE_PATH "knowledge") "*.md"
-    $sourceSize = Get-DirectorySize $SOURCE_PATH
+    $sourceAgents = Get-FileCount (Join-Path $SOURCE_GITHUB_PATH "agents") "*.agent.md"
+    $sourceInstructions = Get-FileCount (Join-Path $SOURCE_GITHUB_PATH "instructions") "*.instructions.md"
+    $sourcePrompts = Get-FileCount (Join-Path $SOURCE_GITHUB_PATH "prompts") "*.prompt.md"
+    $sourceSkills = Get-FileCount (Join-Path $SOURCE_GITHUB_PATH "skills") "SKILL.md"
+    $sourceContext = Get-FileCount (Join-Path $SOURCE_COPILOT_PATH "context") "*.md"
+    $sourceKnowledge = Get-FileCount (Join-Path $SOURCE_COPILOT_PATH "knowledge") "*.md"
+    $sourceSize = Get-DirectorySize $SOURCE_GITHUB_PATH
 
     Write-Host "Source Content:" -ForegroundColor $Color_Info
     Write-Host "  Agents:       $sourceAgents"
-    Write-Host "  Skills:       $sourceSkills (context files)"
-    Write-Host "  Knowledge:    $sourceKnowledge (reference docs)"
+    Write-Host "  Instructions: $sourceInstructions"
+    Write-Host "  Prompts:      $sourcePrompts"
+    Write-Host "  Skills:       $sourceSkills"
+    Write-Host "  Context:      $sourceContext"
+    Write-Host "  Knowledge:    $sourceKnowledge"
     Write-Host "  Total Size:   $(Format-FileSize $sourceSize)"
     Write-Host ""
 
     if ($DryRun) {
         Write-Info "DRY RUN MODE - No changes will be made"
         Write-Host ""
-        Write-Host "Would install to: $COPILOT_PATH"
+        Write-Host "Source template: $SOURCE_GITHUB_PATH"
+        Write-Host "Would install to: $TARGET_GITHUB_PATH"
         Write-Host ""
 
-        if (Test-Path $COPILOT_PATH) {
-            Write-Warning-Message "Target directory already exists - files will be merged"
-            $existingAgents = Get-FileCount (Join-Path $COPILOT_PATH "instructions") "*.md"
+        if (Test-Path $TARGET_GITHUB_PATH) {
+            Write-Warning-Message "Target .github directory already exists - files will be merged"
+            $existingAgents = Get-FileCount (Join-Path $TARGET_GITHUB_PATH "agents") "*.agent.md"
             if ($existingAgents -gt 0) {
                 Write-Host "  Existing agents: $existingAgents (will be preserved)"
             }
@@ -385,60 +505,74 @@ function Invoke-Install {
     }
 
     # Perform installation
-    # Backup existing installation if it exists and -NoBackup not specified
-    if ((Test-Path $COPILOT_PATH) -and (-not $NoBackup)) {
+    # Backup existing target .github if it exists and -NoBackup not specified
+    if ((Test-Path $TARGET_GITHUB_PATH) -and (-not $NoBackup)) {
         $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-        $backupPath = "$COPILOT_PATH.backup.$timestamp"
+        $backupPath = "$TARGET_GITHUB_PATH.backup.$timestamp"
         Write-Info "Creating backup: $backupPath"
         Write-Log "Creating backup: $backupPath"
-        Copy-Item -Path $COPILOT_PATH -Destination $backupPath -Recurse -Force
+        Copy-Item -Path $TARGET_GITHUB_PATH -Destination $backupPath -Recurse -Force
         Write-Log "Backup created successfully: $backupPath"
         Write-Host ""
     }
 
-    Write-Info "Installing to: $COPILOT_PATH"
+    Write-Info "Installing to: $TARGET_GITHUB_PATH"
     Write-Host ""
 
     # Copy components
     $copiedCount = 0
 
-    # Copy instructions (agents)
-    if (Test-Path (Join-Path $SOURCE_PATH "instructions")) {
-        $count = Copy-Safe -Source (Join-Path $SOURCE_PATH "instructions") -Destination (Join-Path $COPILOT_PATH "instructions")
-        Write-Success "Copied $count agent instruction files"
-        Write-Log "Copied $count agent instruction files"
+    # Copy workspace instruction
+    $count = Copy-FileSafe -SourceFile (Join-Path $SOURCE_GITHUB_PATH "copilot-instructions.md") -DestinationFile (Join-Path $TARGET_GITHUB_PATH "copilot-instructions.md")
+    Write-Success "Copied $count workspace instruction file"
+    Write-Log "Copied $count workspace instruction file"
+    $copiedCount += $count
+
+    # Copy agent profiles
+    if (Test-Path (Join-Path $SOURCE_GITHUB_PATH "agents")) {
+        $count = Copy-Safe -Source (Join-Path $SOURCE_GITHUB_PATH "agents") -Destination (Join-Path $TARGET_GITHUB_PATH "agents")
+        Write-Success "Copied $count agent files"
+        Write-Log "Copied $count agent files"
         $copiedCount += $count
     }
 
-    # Copy context (skills)
-    if (Test-Path (Join-Path $SOURCE_PATH "context")) {
-        $count = Copy-Safe -Source (Join-Path $SOURCE_PATH "context") -Destination (Join-Path $COPILOT_PATH "context")
-        Write-Success "Copied $count skill context files"
-        Write-Log "Copied $count skill context files"
+    # Copy canonical instructions
+    if (Test-Path (Join-Path $SOURCE_GITHUB_PATH "instructions")) {
+        $count = Copy-Safe -Source (Join-Path $SOURCE_GITHUB_PATH "instructions") -Destination (Join-Path $TARGET_GITHUB_PATH "instructions")
+        Write-Success "Copied $count instruction files"
+        Write-Log "Copied $count instruction files"
+        $copiedCount += $count
+    }
+
+    # Copy prompts
+    if (Test-Path (Join-Path $SOURCE_GITHUB_PATH "prompts")) {
+        $count = Copy-Safe -Source (Join-Path $SOURCE_GITHUB_PATH "prompts") -Destination (Join-Path $TARGET_GITHUB_PATH "prompts")
+        Write-Success "Copied $count prompt files"
+        Write-Log "Copied $count prompt files"
+        $copiedCount += $count
+    }
+
+    # Copy skills
+    if (Test-Path (Join-Path $SOURCE_GITHUB_PATH "skills")) {
+        $count = Copy-Safe -Source (Join-Path $SOURCE_GITHUB_PATH "skills") -Destination (Join-Path $TARGET_GITHUB_PATH "skills")
+        Write-Success "Copied $count skill files"
+        Write-Log "Copied $count skill files"
+        $copiedCount += $count
+    }
+
+    # Copy copilot context
+    if (Test-Path (Join-Path $SOURCE_COPILOT_PATH "context")) {
+        $count = Copy-Safe -Source (Join-Path $SOURCE_COPILOT_PATH "context") -Destination (Join-Path $COPILOT_PATH "context")
+        Write-Success "Copied $count context files"
+        Write-Log "Copied $count context files"
         $copiedCount += $count
     }
 
     # Copy knowledge base
-    if (Test-Path (Join-Path $SOURCE_PATH "knowledge")) {
-        $count = Copy-Safe -Source (Join-Path $SOURCE_PATH "knowledge") -Destination (Join-Path $COPILOT_PATH "knowledge")
+    if (Test-Path (Join-Path $SOURCE_COPILOT_PATH "knowledge")) {
+        $count = Copy-Safe -Source (Join-Path $SOURCE_COPILOT_PATH "knowledge") -Destination (Join-Path $COPILOT_PATH "knowledge")
         Write-Success "Copied $count knowledge files"
         Write-Log "Copied $count knowledge files"
-        $copiedCount += $count
-    }
-
-    # Copy triggers
-    if (Test-Path (Join-Path $SOURCE_PATH "triggers")) {
-        $count = Copy-Safe -Source (Join-Path $SOURCE_PATH "triggers") -Destination (Join-Path $COPILOT_PATH "triggers")
-        Write-Success "Copied $count trigger files"
-        Write-Log "Copied $count trigger files"
-        $copiedCount += $count
-    }
-
-    # Copy personas
-    if (Test-Path (Join-Path $SOURCE_PATH "personas")) {
-        $count = Copy-Safe -Source (Join-Path $SOURCE_PATH "personas") -Destination (Join-Path $COPILOT_PATH "personas")
-        Write-Success "Copied $count persona files"
-        Write-Log "Copied $count persona files"
         $copiedCount += $count
     }
 
@@ -456,7 +590,7 @@ function Invoke-Install {
     Write-Host "================================================================"
     Write-Host "Next Steps:" -ForegroundColor $Color_Info
     Write-Host ""
-    Write-Host "1. Restart VS Code to activate GitHub Copilot integration"
+    Write-Host "1. Restart VS Code (or reload window) to refresh GitHub Copilot customization discovery"
     Write-Host ""
     Write-Host "2. Verify installation:"
     Write-Host "   .\setup.ps1 -Status"

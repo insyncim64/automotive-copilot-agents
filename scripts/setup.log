@@ -9,3 +9,43 @@
 2026-03-25 21:08:44 - INFO - Copied 0 persona files
 2026-03-25 21:08:44 - INFO - Installation complete: 0 files copied
 2026-03-25 21:08:49 - INFO - Created installation manifest
+2026-03-26 08:50:51 - INFO - Starting installation
+2026-03-26 08:50:51 - INFO - Source validated: C:\Users\A536701\Development\automotive-copilot-agents\.github\copilot
+2026-03-26 08:50:51 - INFO - Creating backup: C:\Users\A536701\Development\automotive-copilot-agents\.github\copilot.backup.20260326_085051
+2026-03-26 08:50:51 - INFO - Backup created successfully: C:\Users\A536701\Development\automotive-copilot-agents\.github\copilot.backup.20260326_085051
+2026-03-26 08:50:51 - INFO - Copied 0 agent instruction files
+2026-03-26 08:50:51 - INFO - Copied 0 skill context files
+2026-03-26 08:50:52 - INFO - Copied 0 knowledge files
+2026-03-26 08:50:52 - INFO - Installation complete: 0 files copied
+2026-03-26 08:50:52 - INFO - Manifest created with 170 components
+2026-03-26 09:01:43 - INFO - Starting installation
+2026-03-26 09:01:43 - INFO - Source validated: C:\Users\A536701\Development\automotive-copilot-agents\.github\copilot
+2026-03-26 09:01:43 - INFO - Creating backup: C:\Users\A536701\Development\automotive-copilot-agents\.github\copilot.backup.20260326_090143
+2026-03-26 09:01:43 - INFO - Backup created successfully: C:\Users\A536701\Development\automotive-copilot-agents\.github\copilot.backup.20260326_090143
+2026-03-26 09:01:43 - INFO - Copied 0 agent instruction files
+2026-03-26 09:01:43 - INFO - Copied 0 skill context files
+2026-03-26 09:01:44 - INFO - Copied 0 knowledge files
+2026-03-26 09:01:44 - INFO - Installation complete: 0 files copied
+2026-03-26 09:01:44 - INFO - Manifest created with 170 components
+2026-03-26 09:02:58 - INFO - Starting installation
+2026-03-26 09:02:58 - INFO - Source validated: C:\Users\A536701\Development\automotive-copilot-agents\.github\copilot
+2026-03-26 09:02:58 - INFO - Creating backup: C:\Users\A536701\Development\automotive-copilot-agents\.github\copilot.backup.20260326_090258
+2026-03-26 09:02:58 - INFO - Backup created successfully: C:\Users\A536701\Development\automotive-copilot-agents\.github\copilot.backup.20260326_090258
+2026-03-26 09:02:58 - INFO - Copied 0 agent instruction files
+2026-03-26 09:02:58 - INFO - Copied 0 skill context files
+2026-03-26 09:02:58 - INFO - Copied 0 knowledge files
+2026-03-26 09:02:58 - INFO - Installation complete: 0 files copied
+2026-03-26 09:02:58 - INFO - Manifest created with 170 components
+2026-03-26 09:03:56 - INFO - Starting installation
+2026-03-26 09:03:56 - ERROR - Source directory not found: --status\.github\copilot
+2026-03-26 09:04:49 - INFO - Starting installation
+2026-03-26 09:04:49 - ERROR - Source directory not found: --status\.github\copilot
+2026-03-26 09:05:17 - INFO - Starting installation
+2026-03-26 09:05:17 - INFO - Source validated: C:\Users\A536701\Development\automotive-copilot-agents\.github\copilot
+2026-03-26 09:05:17 - INFO - Creating backup: C:\Users\A536701\Development\automotive-copilot-agents\.github\copilot.backup.20260326_090517
+2026-03-26 09:05:17 - INFO - Backup created successfully: C:\Users\A536701\Development\automotive-copilot-agents\.github\copilot.backup.20260326_090517
+2026-03-26 09:05:17 - INFO - Copied 0 agent instruction files
+2026-03-26 09:05:17 - INFO - Copied 0 skill context files
+2026-03-26 09:05:17 - INFO - Copied 0 knowledge files
+2026-03-26 09:05:17 - INFO - Installation complete: 0 files copied
+2026-03-26 09:05:17 - INFO - Manifest created with 170 components

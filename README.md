@@ -11,9 +11,10 @@
 <p align="center">
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
   <a href="https://github.com/features/copilot"><img src="https://img.shields.io/badge/Built%20for-GitHub%20Copilot-7C3AED" alt="Built for GitHub Copilot" /></a>
-  <a href="#domains-covered"><img src="https://img.shields.io/badge/Agents-9-green" alt="9 Agents" /></a>
-  <a href="#whats-inside"><img src="https://img.shields.io/badge/Context-7-orange" alt="7 Context Files" /></a>
-  <a href="#whats-inside"><img src="https://img.shields.io/badge/Knowledge-60+-blue" alt="60+ Knowledge Files" /></a>
+  <a href="#whats-inside"><img src="https://img.shields.io/badge/Agents-15-green" alt="15 Agents" /></a>
+  <a href="#whats-inside"><img src="https://img.shields.io/badge/Skills-30-teal" alt="30 Skills" /></a>
+  <a href="#whats-inside"><img src="https://img.shields.io/badge/Context-38-orange" alt="38 Context Files" /></a>
+  <a href="#whats-inside"><img src="https://img.shields.io/badge/Knowledge-117-blue" alt="117 Knowledge Files" /></a>
 </p>
 
 <p align="center">
@@ -29,7 +30,7 @@
 
 > **Ported from** [automotive-claude-code-agents](https://github.com/theja0473/automotive-claude-code-agents) by Yuxin Zhang
 >
-> This project adapts the original automotive AI agent framework for GitHub Copilot Custom Instructions, providing domain-expert assistance directly in your IDE through @-mention activation.
+> This project adapts the original automotive AI agent framework for GitHub Copilot customizations, providing domain-expert assistance directly in your IDE through workspace instructions, agents, skills, prompts, context, and knowledge grounding.
 
 ---
 
@@ -39,11 +40,11 @@ Automotive software engineering is one of the most complex and regulated domains
 
 **Automotive Copilot Agents** turns GitHub Copilot into a domain-expert assistant that understands the automotive stack from silicon to cloud. Instead of spending hours looking up ASIL decomposition rules or AUTOSAR naming conventions, you get instant, standards-compliant guidance woven directly into your development workflow.
 
-One install. Zero config. Your existing workspace stays untouched.
+One install. Minimal manual setup. Your target project's `.github` customization layer is updated in a controlled, append-safe way.
 
 ```
 Before:  "How do I structure an FMEA for this BMS module?" -> 2 hours of research
-After:   @automotive-functional-safety-engineer "Generate FMEA for overcurrent protection in ASIL-D BMS" -> 2 minutes
+After:   Select the functional safety agent, attach ISO 26262 grounding, and ask for an ASIL-D BMS FMEA -> 2 minutes
 ```
 
 ---
@@ -57,16 +58,15 @@ After:   @automotive-functional-safety-engineer "Generate FMEA for overcurrent p
 cd C:\path\to\automotive-copilot-agents
 
 # 2. Preview installation (no changes made)
-.\scripts\setup.ps1 -DryRun
+.\scripts\setup.ps1 -ProjectPath C:\path\to\your-project -DryRun
 
-# 3. Install agents to your project
-.\scripts\setup.ps1
+# 3. Install the .github customization package to your project
+.\scripts\setup.ps1 -ProjectPath C:\path\to\your-project
 
 # 4. Validate installation
-.\scripts\validate-install.ps1
+.\scripts\validate-install.ps1 -ProjectPath C:\path\to\your-project
 
-# 5. Restart VS Code and use @-mention activation
-# In Copilot Chat: @automotive-functional-safety-engineer Help me design ISO 26262 ASIL-D compliant BMS
+# 5. Restart VS Code, select an automotive agent in Copilot Chat, and attach grounding files when needed
 ```
 
 ### Linux/macOS (Bash)
@@ -92,29 +92,45 @@ chmod +x scripts/*.sh
 
 ```bash
 # Check installation status
-.\scripts\setup.ps1 -Status
+.\scripts\setup.ps1 -ProjectPath C:\path\to\your-project -Status
 
 # Run validation with verbose output
-.\scripts\validate-install.ps1 -Verbose
+.\scripts\validate-install.ps1 -ProjectPath C:\path\to\your-project -Verbose
 
 # Export validation results as JSON
-.\scripts\validate-install.ps1 -OutputFormat json
+.\scripts\validate-install.ps1 -ProjectPath C:\path\to\your-project -OutputFormat json
 ```
 
-### Using the Agents
+### Using the Customizations
 
-Once installed, activate agents in GitHub Copilot Chat using @-mention:
+Once installed, you can combine multiple Copilot customization surfaces in one chat:
+
+- Select a domain agent explicitly in the Copilot UI when you want a specialist persona
+- Let repository and file-scoped instructions apply automatically when relevant
+- Run prompt files and skills as slash commands for focused workflows
+- Attach context or knowledge files to ground the answer in standards or domain references
+
+Example prompts:
 
 ```
-@automotive-functional-safety-engineer Generate HARA for battery over-voltage protection
-@automotive-cybersecurity-engineer Perform TARA for OTA update system
-@automotive-autosar-architect Design AUTOSAR Adaptive service for camera fusion
-@automotive-battery-bms-engineer Implement SOC estimation using EKF
-@automotive-adas-planning-engineer Design path planning for highway lane change
-@automotive-adas-control-engineer Implement lateral control with MPC
-@automotive-powertrain-control-engineer Design torque management strategy
-@automotive-chassis-systems-engineer Implement ESC control algorithm
-@automotive-diagnostics-engineer Implement UDS Service 0x22 ReadDataByIdentifier
+Select the automotive-functional-safety-engineer agent, then ask: Generate HARA for battery over-voltage protection
+Select the automotive-cybersecurity-engineer agent, then ask: Perform TARA for OTA update system
+Select the automotive-autosar-architect agent, then ask: Design AUTOSAR Adaptive service for camera fusion
+Select the automotive-battery-bms-engineer agent, then ask: Implement SOC estimation using EKF
+Select the automotive-adas-planning-engineer agent, then ask: Design path planning for highway lane change
+Select the automotive-adas-control-engineer agent, then ask: Implement lateral control with MPC
+Select the automotive-powertrain-control-engineer agent, then ask: Design torque management strategy
+Select the automotive-chassis-systems-engineer agent, then ask: Implement ESC control algorithm
+Select the automotive-diagnostics-engineer agent, then ask: Implement UDS Service 0x22 ReadDataByIdentifier
+```
+
+To ground an answer with project references, attach a context or knowledge file first, then ask your question. For example:
+
+```text
+Select the automotive-functional-safety-engineer agent.
+Attach .github/copilot/knowledge/standards/iso26262/2-conceptual.md.
+Use .github/copilot/knowledge/standards/iso26262/2-conceptual.md as grounding.
+Derive an ASIL rationale for battery over-voltage detection.
 ```
 
 ---
@@ -123,21 +139,169 @@ Once installed, activate agents in GitHub Copilot Chat using @-mention:
 
 | Component | Count | Location | Description |
 |-----------|------:|----------|-------------|
-| **Agents** | 9 | `.github/copilot/instructions/` | Specialized AI personas for automotive domains |
-| **Context Files** | 7 | `.github/copilot/context/adas/` | ADAS-specific context and reference data |
-| **Knowledge Base** | 60+ | `.github/copilot/knowledge/` | Standards, processes, and technology reference docs |
+| **Workspace Instruction** | 1 | `.github/copilot-instructions.md` | Always-on workspace guidance |
+| **Agents** | 15 | `.github/agents/` | Reusable specialized agent profiles with trigger metadata |
+| **Instructions** | 15 | `.github/instructions/` | Canonical instruction content for automotive domains |
+| **Prompts** | 3 | `.github/prompts/` | Reusable task templates |
+| **Skills** | 30 | `.github/skills/` | Modular skill packages with focused workflows |
+| **Context Files** | 38 | `.github/copilot/context/` | Attachment-ready domain grounding |
+| **Knowledge Base** | 117 | `.github/copilot/knowledge/` | Standards, processes, and technology reference docs |
 
 ### How It Integrates
 
 ```
-Your Project                          +  Automotive Copilot Agents
-                                      |
-.github/                              |
-  copilot/                            |
-    instructions/      (untouched)    |  automotive-*.md agents added
-    context/           (untouched)    |  adas/ context files added
-    knowledge/         (untouched)    |  standards/, processes/, technologies/ added
+Target Project/.github/
+  copilot-instructions.md             # workspace-level always-on behavior
+  agents/                             # reusable agent profiles
+  instructions/                       # canonical instruction files
+  prompts/                            # reusable prompt templates
+  skills/                             # skill packages
+  copilot/
+  context/                          # attachable context files
+    knowledge/                        # attachable reference corpus for grounding
 ```
+
+The installer copies this template repository's `.github/` structure into the target project's `.github/` folder. In the current layout, `.github/copilot/` is reserved for `context/` and `knowledge/`, while agents, instructions, prompts, and skills live directly under `.github/`.
+
+---
+
+## How Activation Works
+
+Each customization surface serves a different purpose:
+
+| Surface | Location | How It Activates | Best Use |
+|--------|----------|------------------|----------|
+| **Workspace Instruction** | `.github/copilot-instructions.md` | Always loaded for the workspace | Global engineering priorities and discovery rules |
+| **Instruction** | `.github/instructions/*.instructions.md` | Automatically applied when the active task or file matches the instruction scope | Domain guidance for relevant files and tasks |
+| **Agent** | `.github/agents/*.agent.md` | Explicitly selected in the Copilot UI | Force a specialized domain persona |
+| **Skill** | `.github/skills/*/SKILL.md` | Manually invoked in chat as a slash command (for example `/skill-name`) | Focused repeatable workflows |
+| **Prompt** | `.github/prompts/*.prompt.md` | Manually invoked in chat as a slash command (for example `/prompt-name`) | Structured one-shot tasks |
+| **Context** | `.github/copilot/context/**` | Attached manually as chat context | Lightweight domain grounding |
+| **Knowledge** | `.github/copilot/knowledge/**` | Attached manually to chat | Deep standards/process/technology grounding |
+
+### Agents
+
+Use agents when you want to force Copilot into a specific automotive specialist mode. Select the agent explicitly in the Copilot interface before sending your request:
+
+```text
+Select automotive-diagnostics-engineer, then ask: Implement UDS Service 0x19 for DTC readout
+Select automotive-functional-safety-engineer, then ask: Review this safety requirement for ISO 26262 compliance
+```
+
+### Instructions
+
+Instructions are not usually invoked manually. They are the canonical guidance files Copilot uses automatically when the task or file type matches the instruction metadata. For example, editing AUTOSAR XML, embedded C, or safety documents can pull in different instruction sets automatically.
+
+### Skills
+
+Skills are modular reusable workflows. Use them when you want a focused capability rather than a whole persona. They complement agents and instructions rather than replacing them.
+
+In Copilot Chat, invoke skills as slash commands (`/skill-name`) and optionally attach additional context or knowledge files.
+
+### Prompts
+
+Prompts are reusable task templates. Use them when you want a structured request format for repeated tasks such as controller generation, ASIL validation, or BMS architecture creation.
+
+In VS Code, enable prompt files and invoke them directly as slash commands (`/prompt-name`). You can also run a prompt via the command palette or prompt editor actions.
+
+Examples:
+
+```text
+/generate-acc-controller to draft a longitudinal ACC controller.
+/validate-asil-compliance to review this requirement set.
+/create-bms-architecture to scaffold an EV battery management architecture.
+```
+
+### Context
+
+Context files are lightweight grounding assets. Use them when you want to narrow the answer to a specific topic, such as sensor fusion or ISO 26262 overview material. Attach them manually to Copilot Chat as supporting context.
+
+Examples from `.github/copilot/context/CONTEXT-REFERENCE.md`:
+
+```text
+Attach .github/copilot/context/skills/adas/sensor-fusion.md, then ask: Explain a late-fusion pipeline for camera-radar perception
+Attach .github/copilot/context/skills/autosar/classic-platform.md, then ask: Show a CAN stack configuration strategy
+Attach .github/copilot/context/skills/safety/iso-26262-overview.md, then ask: Summarize ASIL decomposition constraints
+```
+
+### Knowledge
+
+Knowledge files are deeper reference documents. They are best used as explicit grounding input when you need standards-aligned output, implementation depth, or reference-style detail.
+
+---
+
+## How To Ground Prompts With Knowledge
+
+Knowledge files are not assumed automatically. To use them effectively, add them to the chat as context before asking for output.
+
+In practice, this usually means one of these flows in Copilot Chat:
+
+- Use `Add Context` and attach the file from `.github/copilot/knowledge/...`
+- Drag the knowledge markdown file into the chat input
+- Reference the exact path in the prompt and explicitly tell Copilot to use it as grounding
+
+### Recommended workflow
+
+1. Pick the right domain persona or workflow surface.
+2. Attach one or more knowledge files from `.github/copilot/knowledge/`.
+3. Tell Copilot to use those files as grounding.
+4. Ask for the deliverable you want.
+
+### Which knowledge depth to use
+
+| File Level | Use Case |
+|-----------|----------|
+| `1-overview.md` | Quick orientation or terminology |
+| `2-conceptual.md` | Design discussions and framework explanations |
+| `3-detailed.md` | Implementation guidance and technical analysis |
+| `4-reference.md` | Checklist, API, or specification-style answers |
+| `5-advanced.md` | Optimization, edge cases, expert patterns |
+
+### Grounded prompt examples
+
+Agent + knowledge:
+
+```text
+Select automotive-functional-safety-engineer.
+Attach .github/copilot/knowledge/standards/iso26262/3-detailed.md.
+Use .github/copilot/knowledge/standards/iso26262/3-detailed.md as grounding.
+Generate technical safety requirements for battery over-voltage detection.
+```
+
+Agent + context + knowledge:
+
+```text
+Select automotive-adas-perception-engineer.
+Attach .github/copilot/context/skills/adas/sensor-fusion.md.
+Attach .github/copilot/knowledge/standards/iso21448-sotif/2-conceptual.md.
+Use both attached files as grounding.
+Propose a sensor-fusion validation strategy for poor-weather object detection.
+```
+
+Prompt template + knowledge:
+
+```text
+Open Attach Context > Prompt and choose validate-asil-compliance.
+Attach .github/copilot/knowledge/standards/iso26262/4-reference.md.
+Ground the answer with .github/copilot/knowledge/standards/iso26262/4-reference.md.
+Review this requirement set for missing ASIL work products.
+```
+
+Skill + knowledge:
+
+```text
+Use the diagnostics-uds skill/workflow.
+Attach .github/copilot/knowledge/standards/autosar-classic/3-detailed.md.
+Ground the answer with .github/copilot/knowledge/standards/autosar-classic/3-detailed.md.
+Design a UDS 0x22 implementation compatible with AUTOSAR DCM integration.
+```
+
+### Good grounding habits
+
+- Attach only the files relevant to the current task.
+- Prefer one or two focused knowledge files over attaching a whole category.
+- Combine a specialist agent with one deep knowledge file when you need standards-aligned output.
+- Use context files for topic framing and knowledge files for authoritative depth.
 
 ---
 
@@ -145,15 +309,15 @@ Your Project                          +  Automotive Copilot Agents
 
 | Domain | Agent | What You Get |
 |--------|-------|-------------|
-| **Functional Safety** | @automotive-functional-safety-engineer | HARA, FMEA, FTA, ASIL decomposition, ISO 26262 lifecycle, safety cases |
-| **Cybersecurity** | @automotive-cybersecurity-engineer | TARA, ISO 21434 compliance, SecOC, secure boot, PKI, intrusion detection |
-| **AUTOSAR Architecture** | @automotive-autosar-architect | Classic/Adaptive platform design, SWC scaffolding, RTE generation, BSW config |
-| **Battery & BMS** | @automotive-battery-bms-engineer | SOC/SOH estimation, cell balancing, thermal management, ISO 12405 compliance |
-| **ADAS Planning** | @automotive-adas-planning-engineer | Path planning, trajectory generation, behavioral prediction, SOTIF analysis |
-| **ADAS Control** | @automotive-adas-control-engineer | Lateral/longitudinal control, MPC, sensor fusion, perception pipelines |
-| **Powertrain** | @automotive-powertrain-control-engineer | Engine/transmission control, torque management, emissions compliance |
-| **Chassis Systems** | @automotive-chassis-systems-engineer | ESC, ABS, EPS, suspension control, vehicle dynamics |
-| **Diagnostics** | @automotive-diagnostics-engineer | UDS (ISO 14229), OBD-II, DTC management, DoIP, flash programming |
+| **Functional Safety** | automotive-functional-safety-engineer | HARA, FMEA, FTA, ASIL decomposition, ISO 26262 lifecycle, safety cases |
+| **Cybersecurity** | automotive-cybersecurity-engineer | TARA, ISO 21434 compliance, SecOC, secure boot, PKI, intrusion detection |
+| **AUTOSAR Architecture** | automotive-autosar-architect | Classic/Adaptive platform design, SWC scaffolding, RTE generation, BSW config |
+| **Battery & BMS** | automotive-battery-bms-engineer | SOC/SOH estimation, cell balancing, thermal management, ISO 12405 compliance |
+| **ADAS Planning** | automotive-adas-planning-engineer | Path planning, trajectory generation, behavioral prediction, SOTIF analysis |
+| **ADAS Control** | automotive-adas-control-engineer | Lateral/longitudinal control, MPC, sensor fusion, perception pipelines |
+| **Powertrain** | automotive-powertrain-control-engineer | Engine/transmission control, torque management, emissions compliance |
+| **Chassis Systems** | automotive-chassis-systems-engineer | ESC, ABS, EPS, suspension control, vehicle dynamics |
+| **Diagnostics** | automotive-diagnostics-engineer | UDS (ISO 14229), OBD-II, DTC management, DoIP, flash programming |
 
 ### Standards Coverage
 
@@ -174,48 +338,38 @@ Your Project                          +  Automotive Copilot Agents
 
 ```
 automotive-copilot-agents/
-  .github/copilot/
-    instructions/              # 9 agent definition files
-      automotive-functional-safety-engineer.md
-      automotive-cybersecurity-engineer.md
-      automotive-autosar-architect.md
-      automotive-battery-bms-engineer.md
-      automotive-adas-planning-engineer.md
-      automotive-adas-control-engineer.md
-      automotive-powertrain-control-engineer.md
-      automotive-chassis-systems-engineer.md
-      automotive-diagnostics-engineer.md
-    context/
-      adas/                    # ADAS-specific context
-        sensor-fusion.md
-        camera-processing.md
-        radar-processing.md
-        lidar-processing.md
-        object-tracking.md
-        calibration.md
-        sotif-testing.md
-    knowledge/
-      standards/               # Standards reference library
-        iso26262/              # Functional safety (5 files)
-        autosar-classic/       # AUTOSAR Classic (5 files)
-        autosar-adaptive/      # AUTOSAR Adaptive (5 files)
-        iso21434/              # Cybersecurity (5 files)
-        iso21448-sotif/        # SOTIF (5 files)
-        aspice/                # ASPICE (5 files)
-        misra/                 # MISRA guidelines (5 files)
-        unr155/                # UN R155 (5 files)
-        china-standards/       # China mandatory standards
-      processes/               # Development processes
-        ci-cd/                 # CI/CD pipelines (5 files)
-        code-review/           # Code review guidelines (5 files)
-        fmea/                  # FMEA methodology (5 files)
-      technologies/            # Technology reference
-        battery-management/    # BMS technologies (5 files)
-        sensor-fusion/         # Fusion algorithms (5 files)
-        autonomous-driving/    # AD technologies (5 files)
-        v2x/                   # V2X communication (5 files)
-        ota-updates/           # OTA systems (5 files)
-        hil-testing/           # HIL test setups (5 files)
+  .github/
+    copilot-instructions.md    # Workspace-level behavior and discovery guidance
+    agents/                    # 15 reusable agent profiles
+      automotive-functional-safety-engineer.agent.md
+      automotive-cybersecurity-engineer.agent.md
+      automotive-autosar-architect.agent.md
+      ...
+    instructions/              # 15 canonical instruction files
+      automotive-functional-safety-engineer.instructions.md
+      automotive-cybersecurity-engineer.instructions.md
+      automotive-autosar-architect.instructions.md
+      ...
+    prompts/                   # 3 reusable prompt templates
+      validate-asil-compliance.prompt.md
+      generate-acc-controller.prompt.md
+      create-bms-architecture.prompt.md
+    skills/                    # 30 skill packages
+      safety-iso-26262-overview/
+        SKILL.md
+      diagnostics-uds/
+        SKILL.md
+      ...
+    copilot/
+      context/                 # 38 attachable context files
+        CONTEXT-REFERENCE.md
+        adas/
+        skills/
+      knowledge/               # 117 standards/process/technology docs
+        standards/
+        processes/
+        technologies/
+        tools/
   scripts/
     setup.ps1                  # Windows installer
     setup.sh                   # Linux/macOS installer
@@ -233,10 +387,11 @@ automotive-copilot-agents/
 
 The installation scripts are designed to be safe for repeated use:
 
+- **Copies** the template repository's `.github/` content into a target project's `.github/`
 - **Never overwrites** existing files with the same content
 - **Updates** files that have changed
 - **Adds** new files without removing existing ones
-- **Tracks** all installed files in `.install.manifest.json`
+- **Tracks** installed components in `.github/copilot/.install.manifest.json`
 - **Supports** clean uninstall via `-Uninstall` flag
 
 ### Installation Parameters
@@ -268,13 +423,13 @@ The validation scripts perform 10 comprehensive checks:
 
 | # | Check | Severity | Description |
 |---|-------|----------|-------------|
-| 1 | Copilot Directory Exists | Error | Verifies `.github/copilot/` directory present |
+| 1 | GitHub Customization Layout Exists | Error | Verifies required `.github/` structure is present |
 | 2 | Manifest File Exists | Warning | Verifies `.install.manifest.json` present |
-| 3 | Agent Count | Error | Minimum 5 agents required (9 installed) |
-| 4 | Skill/Context Count | Warning | Minimum 10 context files (7 installed) |
-| 5 | Knowledge Count | Warning | Minimum 20 knowledge files (60+ installed) |
+| 3 | Agent Count | Error | Minimum 5 agents required (15 installed) |
+| 4 | Skill/Context Count | Warning | Verifies skill and context assets are present |
+| 5 | Knowledge Count | Warning | Verifies knowledge corpus is present |
 | 6 | File Integrity | Error | Checks for empty markdown files |
-| 7 | Agent Format | Warning | Verifies required sections present |
+| 7 | Customization Format | Warning | Verifies required sections/frontmatter present |
 | 8 | Installation Size | Info | Reports total size |
 | 9 | VS Code Integration | Info | Checks workspace settings |
 | 10 | Manifest Consistency | Info | Verifies manifest matches files |
@@ -374,7 +529,7 @@ bash scripts/setup.sh
 
 | Issue | Solution |
 |-------|----------|
-| `.github/copilot/` missing | Run `setup.ps1` or `setup.sh` |
+| `.github/` customization files missing | Run `setup.ps1` or `setup.sh` |
 | Agent count below minimum | Ensure source has at least 5 agent files |
 | Empty files detected | Run with `--fix` to remove empty files |
 | Manifest mismatch | Re-run setup to regenerate manifest |
@@ -401,7 +556,10 @@ To force a clean install:
 ## Related Documentation
 
 - [scripts/README.md](scripts/README.md) - Installation and validation script documentation
-- [.github/copilot/instructions/](.github/copilot/instructions/) - Agent definitions
+- [.github/agents/](.github/agents/) - Agent profiles
+- [.github/instructions/](.github/instructions/) - Canonical instructions
+- [.github/prompts/](.github/prompts/) - Reusable prompt templates
+- [.github/skills/](.github/skills/) - Reusable skills
 - [.github/copilot/context/](.github/copilot/context/) - Context files
 - [.github/copilot/knowledge/](.github/copilot/knowledge/) - Knowledge base
 
